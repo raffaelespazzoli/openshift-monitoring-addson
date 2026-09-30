@@ -1,0 +1,102 @@
+# CPU pressure alerts: node-level CPU PSI and VM vCPU scheduling delay.
+#
+# Recording rules that these alerts depend on are defined in
+# recording-rules.yaml in this same directory.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-management-cpu-alerts
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: capacity-management-cpu-pressure.alerts
+      rules:
+        # 3. High node CPU pressure (PSI).
+        #
+        # CPU PSI "some" tracks the fraction of wall-clock time that
+        # at least one runnable task was waiting for a CPU.  Non-zero
+        # values mean runnable threads are being delayed, increasing
+        # application latency.
+        #
+        # CPU is compressible, so contention causes slowdowns rather
+        # than kills.  Thresholds are therefore higher than memory
+        # PSI (15%/50% vs 5%/20%).
+        #
+        # Thresholds:
+        #   > 0.15 (15%) for 5 min → warning  (scheduling delays)
+        #   > 0.50 (50%) for 5 min → critical (severe CPU starvation)
+        - alert: NodeCPUPressureHigh
+          expr: |
+            cluster:node:cpu:pressure:ratio > 0.15
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Node {{ $labels.node }} CPU pressure at
+              {{ $value | humanizePercentage }}.
+            description: >-
+              More than 15% of wall-clock time on {{ $labels.node }}
+              has been spent with at least one runnable task waiting
+              for a CPU over the last 5 minutes.  Workloads are
+              experiencing scheduling delays.  Consider reducing CPU
+              overcommit or draining workloads.
+              Current pressure: {{ $value | humanizePercentage }}.
+
+        - alert: NodeCPUPressureCritical
+          expr: |
+            cluster:node:cpu:pressure:ratio > 0.50
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Node {{ $labels.node }} CPU pressure critical at
+              {{ $value | humanizePercentage }}.
+            description: >-
+              More than 50% of wall-clock time on {{ $labels.node }}
+              is spent with runnable tasks waiting for CPUs.  The
+              node is severely overloaded and workloads are
+              experiencing significant latency.  Immediate action
+              required: reduce CPU overcommit, drain non-critical
+              workloads, or add node capacity.
+              Current pressure: {{ $value | humanizePercentage }}.
+
+        # 3b. VM vCPU scheduling delay — the host-side face of CPU
+        # contention for VMs.
+        #
+        # kubevirt_vmi_vcpu_delay_seconds_total tracks the time
+        # vCPUs spend waiting in the host scheduler queue.  This
+        # complements KubeVirt's built-in guest-internal alerts
+        # (GuestVCPUQueueHighWarning/Critical) which measure guest
+        # OS load vs vCPU count.  This alert catches when the HOST
+        # is the bottleneck — the guest has work to do but the host
+        # isn't scheduling the vCPU onto a physical core.
+        #
+        # The threshold is in vCPU-seconds of delay per wall-clock
+        # second.  A value of 0.5 means half a vCPU's worth of
+        # time is spent waiting — significant for a single-vCPU VM,
+        # moderate for a 16-vCPU VM.
+        - alert: VMvCPUDelayHigh
+          expr: |
+            vmi:cpu:vcpu_delay:ratio > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              VM {{ $labels.name }} in {{ $labels.namespace }} vCPU
+              scheduling delay at {{ $value | humanize }}
+              vCPU-seconds/s.
+            description: >-
+              The vCPUs of VM {{ $labels.name }} in namespace
+              {{ $labels.namespace }} on node {{ $labels.node }}
+              have spent {{ $value | humanize }} vCPU-seconds per
+              second of wall-clock time waiting in the host CPU
+              scheduler queue for more than 5 minutes.  The VM is
+              experiencing host-level CPU contention.  Consider
+              migrating the VM to a less loaded node or reducing
+              the node's CPU overcommit.

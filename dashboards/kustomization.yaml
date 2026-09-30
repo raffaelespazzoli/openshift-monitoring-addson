@@ -1,0 +1,56 @@
+# Dashboard deployment — defaults to PersesDashboard CRs (operator mode).
+#
+# For unmanaged Perses (no operator), replace the last patch entry with:
+#   - path: wrap-configmap.yaml
+#     target:
+#       kind: Dashboard
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - dac/built/vm-capacity_output.yaml
+  - dac/built/capacity-exhaustion_output.yaml
+  - dac/built/vm-overcommit_output.yaml
+  - dac/built/node-memory_output.yaml
+  - dac/built/pod-memory_output.yaml
+  - dac/built/vm-memory_output.yaml
+
+patches:
+  # percli emits ListVariable defaultValue as {singleValue, sliceValues}.
+  # The Perses operator only unmarshals a string or array of strings.
+  - target:
+      kind: Dashboard
+      name: vm-capacity
+    patch: |-
+      - op: replace
+        path: /spec/variables/0/spec/defaultValue
+        value: "8589934592"
+      - op: replace
+        path: /spec/variables/1/spec/defaultValue
+        value: "4"
+      - op: replace
+        path: /spec/variables/2/spec/defaultValue
+        value: "1"
+      - op: replace
+        path: /spec/variables/3/spec/defaultValue
+        value: "1"
+  - target:
+      kind: Dashboard
+      name: capacity-exhaustion
+    patch: |-
+      - op: replace
+        path: /spec/variables/0/spec/defaultValue
+        value: "30d"
+  - target:
+      kind: Dashboard
+      name: vm-overcommit
+    patch: |-
+      - op: replace
+        path: /spec/variables/0/spec/defaultValue
+        value: "30d"
+      - op: replace
+        path: /spec/variables/1/spec/defaultValue
+        value: "0.999"
+  - path: wrap-perses-dashboard.yaml
+    target:
+      kind: Dashboard

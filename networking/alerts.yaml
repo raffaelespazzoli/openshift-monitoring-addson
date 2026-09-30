@@ -1,0 +1,78 @@
+# Network saturation alerts: NIC bandwidth utilization.
+#
+# Recording rules that these alerts depend on are defined in
+# recording-rules.yaml in this same directory.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-management-networking-alerts
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: capacity-management-network.alerts
+      rules:
+        # 4. NIC approaching bandwidth saturation.
+        #
+        # Network bandwidth is a compressible resource, but unlike CPU,
+        # TCP congestion control causes throughput to degrade well
+        # before reaching 100% link speed.  Micro-bursts, switch
+        # buffer overflow, and TCP backoff mean that sustained 70%
+        # average utilization already implies periodic saturation.
+        #
+        # We alert on per-NIC utilization (not aggregate) to catch
+        # bond hash-imbalance: one member NIC saturated while others
+        # are idle.  The recording rule already filters on carrier=1
+        # and excludes virtual interfaces.
+        #
+        # Thresholds (industry practice):
+        #   > 0.70 (70%) for 5 min → warning  (plan capacity)
+        #   > 0.85 (85%) for 5 min → critical (immediate action)
+        - alert: NodeNICSaturationWarning
+          expr: |
+            (
+              cluster:node:nic:transmit_utilization:ratio > 0.70
+            or
+              cluster:node:nic:receive_utilization:ratio > 0.70
+            )
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              NIC {{ $labels.device }} on {{ $labels.instance }}
+              utilization at {{ $value | humanizePercentage }}.
+            description: >-
+              Network interface {{ $labels.device }} on node
+              {{ $labels.instance }} has sustained more than 70%
+              bandwidth utilization for 5 minutes.  At this level
+              TCP congestion control is likely causing periodic
+              throughput degradation.  Review traffic patterns and
+              consider load-balancing or upgrading link capacity.
+              Current utilization: {{ $value | humanizePercentage }}.
+
+        - alert: NodeNICSaturationCritical
+          expr: |
+            (
+              cluster:node:nic:transmit_utilization:ratio > 0.85
+            or
+              cluster:node:nic:receive_utilization:ratio > 0.85
+            )
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              NIC {{ $labels.device }} on {{ $labels.instance }}
+              utilization critical at {{ $value | humanizePercentage }}.
+            description: >-
+              Network interface {{ $labels.device }} on node
+              {{ $labels.instance }} has sustained more than 85%
+              bandwidth utilization for 5 minutes.  The link is
+              near saturation — packet drops, increased latency,
+              and TCP throughput collapse are likely.  Immediate
+              action required: redistribute traffic, check for
+              bond hash-imbalance, or upgrade link capacity.
+              Current utilization: {{ $value | humanizePercentage }}.

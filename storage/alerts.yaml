@@ -1,0 +1,136 @@
+# Storage I/O pressure and Fibre Channel saturation alerts.
+#
+# Recording rules that these alerts depend on are defined in
+# recording-rules.yaml in this same directory.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-management-storage-alerts
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: capacity-management-io-pressure.alerts
+      rules:
+        # High node I/O pressure (PSI).
+        #
+        # I/O PSI has two flavors unlike CPU (which only has "some"):
+        #   "some" (waiting) — at least one task stalled on I/O
+        #   "full" (stalled) — ALL tasks stalled (zero progress)
+        #
+        # We use a different PSI flavor for each severity tier:
+        #   warning  → "some" > 50%  (degradation — throughput lost)
+        #   critical → "full" > 15%  (crisis — nothing runs)
+        #
+        # "Some" has a non-trivial baseline (2–15%) on nodes with
+        # active remote storage (iSCSI/FC).  The 50% threshold is
+        # well above any normal baseline.
+        #
+        # "Full" should be near zero on healthy systems.  Even 15%
+        # means the entire node was completely stuck for 9 seconds
+        # every minute.
+        #
+        # The warning uses 10m instead of 5m because block I/O is
+        # inherently bursty (backups, compaction, ODF rebalance).
+        - alert: NodeIOPressureWarning
+          expr: |
+            cluster:node:io:pressure_waiting:ratio > 0.50
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Node {{ $labels.node }} I/O pressure (some) at
+              {{ $value | humanizePercentage }}.
+            description: >-
+              More than 50% of wall-clock time on {{ $labels.node }}
+              has been spent with at least one task waiting for
+              block I/O over the last 10 minutes.  The node is
+              experiencing sustained storage I/O degradation —
+              significant throughput is being lost to I/O stalls.
+              Investigate storage backend health, check for
+              I/O-heavy workloads, and review disk or network
+              (iSCSI) throughput.
+              Current pressure: {{ $value | humanizePercentage }}.
+
+        - alert: NodeIOPressureCritical
+          expr: |
+            cluster:node:io:pressure_stalled:ratio > 0.15
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Node {{ $labels.node }} I/O pressure critical
+              (all stalled) at {{ $value | humanizePercentage }}.
+            description: >-
+              More than 15% of wall-clock time on {{ $labels.node }}
+              is spent with ALL tasks stalled on block I/O — the
+              node made zero progress for {{ $value | humanize }}
+              seconds out of every second.  Immediate action
+              required: check storage array health, verify iSCSI/FC
+              fabric connectivity, drain I/O-intensive workloads,
+              or failover to healthy storage paths.
+              Current stall ratio: {{ $value | humanizePercentage }}.
+
+    - name: capacity-management-fc.alerts
+      rules:
+        # FC HBA approaching bandwidth saturation.
+        #
+        # FC uses credit-based flow control so congestion manifests
+        # as credit starvation (latency spikes) rather than packet
+        # loss.  The same 70%/85% thresholds apply.
+        #
+        # NOTE: These alerts only fire when the node_exporter
+        # fibrechannel collector is enabled and FC HBAs are present.
+        # On clusters without FC storage they are a safe no-op.
+        - alert: NodeFCHBASaturationWarning
+          expr: |
+            (
+              cluster:node:fc:transmit_utilization:ratio > 0.70
+            or
+              cluster:node:fc:receive_utilization:ratio > 0.70
+            )
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              FC HBA {{ $labels.fc_host }} on {{ $labels.instance }}
+              utilization at {{ $value | humanizePercentage }}.
+            description: >-
+              Fibre Channel port {{ $labels.fc_host }} on node
+              {{ $labels.instance }} has sustained more than 70%
+              bandwidth utilization for 5 minutes.  At this level
+              FC credit starvation may be causing I/O latency
+              spikes.  Review storage traffic patterns, check for
+              zoning imbalance, and consider adding FC paths or
+              upgrading port speed.
+              Current utilization: {{ $value | humanizePercentage }}.
+
+        - alert: NodeFCHBASaturationCritical
+          expr: |
+            (
+              cluster:node:fc:transmit_utilization:ratio > 0.85
+            or
+              cluster:node:fc:receive_utilization:ratio > 0.85
+            )
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              FC HBA {{ $labels.fc_host }} on {{ $labels.instance }}
+              utilization critical at {{ $value | humanizePercentage }}.
+            description: >-
+              Fibre Channel port {{ $labels.fc_host }} on node
+              {{ $labels.instance }} has sustained more than 85%
+              bandwidth utilization for 5 minutes.  The port is
+              near saturation — FC credit exhaustion will cause
+              severe I/O latency and throughput collapse.  Immediate
+              action required: redistribute storage workloads,
+              verify multipath balancing, check ISL capacity, or
+              upgrade port speed.
+              Current utilization: {{ $value | humanizePercentage }}.

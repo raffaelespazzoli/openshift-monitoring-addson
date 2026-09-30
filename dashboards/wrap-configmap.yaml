@@ -1,0 +1,32 @@
+# Alternative: Turns a percli `kind: Dashboard` into a ConfigMap for
+# unmanaged Perses (no operator).
+#
+# To use this instead of PersesDashboard CRs, replace the last patch
+# in kustomization.yaml:
+#   - path: wrap-configmap.yaml
+#     target:
+#       kind: Dashboard
+#
+# Adjust the namespace to match your Perses installation.
+- op: add
+  path: /apiVersion
+  value: v1
+- op: replace
+  path: /kind
+  value: ConfigMap
+- op: add
+  path: /metadata/namespace
+  value: perses
+- op: add
+  path: /metadata/labels
+  value:
+    app.kubernetes.io/part-of: perses
+    perses.dev/resource: dashboard
+- op: remove
+  path: /metadata/project
+- op: remove
+  path: /metadata/createdAt
+- op: remove
+  path: /metadata/updatedAt
+- op: remove
+  path: /metadata/version

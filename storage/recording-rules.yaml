@@ -1,0 +1,161 @@
+# Storage I/O Pressure (PSI) and Fibre Channel HBA recording rules.
+#
+# PSI for I/O measures the fraction of wall-clock time that tasks
+# are stalled waiting for block I/O (reads/writes to disk, iSCSI,
+# FC, or any block device).
+#
+# Unlike CPU (which only has "some"), I/O PSI has two flavors:
+#   "some" (waiting) — at least one task stalled on I/O
+#   "full" (stalled) — ALL tasks stalled on I/O (zero progress)
+#
+# For VM guests, KubeVirt does not expose PSI from inside the VM.
+# Instead we use storage I/O latency (time per operation) as the
+# saturation proxy.
+#
+# Requires cgroupv2 and kernel >= 4.20 with psi=1 boot parameter.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-management-storage-rules
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: capacity-management-io-pressure.rules
+      rules:
+        # ── Node scope ───────────────────────────────────────────
+
+        # Node-wide I/O pressure — "some" (at least one task waiting).
+        - record: cluster:node:io:pressure_waiting:ratio
+          expr: |
+            rate(
+              container_pressure_io_waiting_seconds_total{id="/"}[5m]
+            )
+
+        # Node-wide I/O pressure — "full" (ALL tasks waiting).
+        - record: cluster:node:io:pressure_stalled:ratio
+          expr: |
+            rate(
+              container_pressure_io_stalled_seconds_total{id="/"}[5m]
+            )
+
+        # ── Pod scope ────────────────────────────────────────────
+
+        # Per-pod I/O pressure — "some".
+        - record: pod:io:pressure_waiting:ratio
+          expr: |
+            rate(
+              container_pressure_io_waiting_seconds_total{container="", pod!=""}[5m]
+            )
+
+        # Per-pod I/O pressure — "full".
+        - record: pod:io:pressure_stalled:ratio
+          expr: |
+            rate(
+              container_pressure_io_stalled_seconds_total{container="", pod!=""}[5m]
+            )
+
+        # ── Container scope ──────────────────────────────────────
+
+        # Per-container I/O pressure — "some".
+        - record: container:io:pressure_waiting:ratio
+          expr: |
+            rate(
+              container_pressure_io_waiting_seconds_total{container!="", container!="POD"}[5m]
+            )
+
+        # Per-container I/O pressure — "full".
+        - record: container:io:pressure_stalled:ratio
+          expr: |
+            rate(
+              container_pressure_io_stalled_seconds_total{container!="", container!="POD"}[5m]
+            )
+
+        # ── VM guest scope ───────────────────────────────────────
+        #
+        # Storage read latency (seconds per operation, per drive).
+        # Computed as time spent in reads / number of read ops.
+        # The > 0 guard on the denominator avoids division by zero
+        # when a drive has no read activity.
+        - record: vmi:storage:read_latency:seconds
+          expr: |
+            rate(kubevirt_vmi_storage_read_times_seconds_total[5m])
+            /
+            (rate(kubevirt_vmi_storage_iops_read_total[5m]) > 0)
+
+        # Storage write latency (seconds per operation, per drive).
+        - record: vmi:storage:write_latency:seconds
+          expr: |
+            rate(kubevirt_vmi_storage_write_times_seconds_total[5m])
+            /
+            (rate(kubevirt_vmi_storage_iops_write_total[5m]) > 0)
+
+        # Total storage throughput per VM (bytes/s, read + write).
+        # Summed across drives — useful for dashboarding aggregate
+        # I/O load per VM.
+        - record: vmi:storage:throughput:bytes_per_second
+          expr: |
+            sum by (namespace, name, node) (
+              rate(kubevirt_vmi_storage_read_traffic_bytes_total[5m])
+            + rate(kubevirt_vmi_storage_write_traffic_bytes_total[5m])
+            )
+
+    # ── Fibre Channel HBA monitoring ──────────────────────────────
+    #
+    # FC metrics come from node_exporter's fibrechannel collector,
+    # which reads /sys/class/fc_host/hostN/statistics/.
+    #
+    # NOTE: As of OpenShift 4.x, the fibrechannel collector is not
+    # enabled in the default node_exporter configuration.  These rules
+    # are forward-looking for environments with FC-attached storage
+    # where the collector is enabled.  When no FC HBAs exist or the
+    # collector is disabled, these rules produce no time series
+    # (safe no-op).
+    - name: capacity-management-fc.rules
+      rules:
+        # ── FC port speed (label → numeric gauge) ────────────────
+        #
+        # Converts the string speed label to bytes/sec using the
+        # standard FC rate table.
+        - record: cluster:node:fc:port_speed:bytes_per_second
+          expr: |
+            (node_fibrechannel_info{speed="128 Gbit",port_state="Online"} * 0 + 16000000000)
+            or (node_fibrechannel_info{speed="64 Gbit",port_state="Online"} * 0 + 8000000000)
+            or (node_fibrechannel_info{speed="32 Gbit",port_state="Online"} * 0 + 4000000000)
+            or (node_fibrechannel_info{speed="16 Gbit",port_state="Online"} * 0 + 2000000000)
+            or (node_fibrechannel_info{speed="8 Gbit",port_state="Online"} * 0 + 1000000000)
+            or (node_fibrechannel_info{speed="4 Gbit",port_state="Online"} * 0 + 500000000)
+            or (node_fibrechannel_info{speed="2 Gbit",port_state="Online"} * 0 + 250000000)
+            or (node_fibrechannel_info{speed="1 Gbit",port_state="Online"} * 0 + 125000000)
+
+        # ── FC utilization vs link speed ─────────────────────────
+
+        # Transmit utilization: rate(tx_words * 4) / speed_bytes.
+        - record: cluster:node:fc:transmit_utilization:ratio
+          expr: |
+            (rate(node_fibrechannel_tx_words_total[5m]) * 4)
+            / on (instance, fc_host) group_left
+            cluster:node:fc:port_speed:bytes_per_second
+
+        # Receive utilization: rate(rx_words * 4) / speed_bytes.
+        - record: cluster:node:fc:receive_utilization:ratio
+          expr: |
+            (rate(node_fibrechannel_rx_words_total[5m]) * 4)
+            / on (instance, fc_host) group_left
+            cluster:node:fc:port_speed:bytes_per_second
+
+        # ── FC error counters ────────────────────────────────────
+        - record: cluster:node:fc:error_rate:frames_per_second
+          expr: |
+            rate(node_fibrechannel_error_frames_total[5m])
+            + rate(node_fibrechannel_invalid_crc_total[5m])
+
+        # Loss of signal + loss of sync indicate physical layer
+        # problems (cable fault, failing SFP transceiver, loose
+        # connector).  Normal value is 0.
+        - record: cluster:node:fc:link_loss_rate:per_second
+          expr: |
+            rate(node_fibrechannel_loss_of_signal_total[5m])
+            + rate(node_fibrechannel_loss_of_sync_total[5m])

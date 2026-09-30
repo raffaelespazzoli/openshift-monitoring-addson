@@ -1,0 +1,136 @@
+# Network saturation recording rules.
+#
+# Network bandwidth is a compressible resource: contention causes
+# throughput degradation and latency increases, not hard failures.
+# There is no PSI for networking — the kernel PSI subsystem only
+# covers cpu, memory, and io (block).
+#
+# Saturation signals:
+#   - NIC utilization vs link speed (node scope only — we know
+#     link speed from node_network_speed_bytes)
+#   - Packet drops (all scopes — valid packets discarded by the
+#     software stack because it can't keep up)
+#   - Packet errors (node/VM scope — corrupted frames on the wire,
+#     indicating physical/hardware problems)
+#
+# OpenShift's node_exporter configuration excludes bond interfaces
+# from the netdev collector (--collector.netdev.device-exclude
+# includes "bond.*").  We therefore monitor individual physical
+# NICs, which also catches bond hash-imbalance: one member NIC
+# saturated while others are idle.
+#
+# Physical NIC identification
+# ===========================
+# Instead of excluding virtual devices by name regex, we
+# positively identify physical NICs by joining with
+# node_network_info{duplex!=""}.  Physical NICs always report a
+# duplex setting from the PHY (Full, Half, or Unknown when the
+# link is down).  Virtual interfaces (lo, veth, ovs, geneve,
+# bridges) have no physical PHY and never report duplex.
+#
+# We further filter with node_network_carrier == 1 to exclude
+# NICs with no link, which also report garbage speed values.
+# The two filters together give us: physical NICs with carrier.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-management-networking-rules
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: capacity-management-network.rules
+      rules:
+        # ── Node scope: per-NIC utilization vs link speed ────────
+        #
+        # Transmit utilization is typically the bottleneck direction
+        # for servers.  We record both directions.
+
+        # Transmit utilization: rate(tx_bytes) / speed_bytes.
+        # Bounded 0–1 for a single NIC; can briefly exceed 1.0 due
+        # to TSO/GSO offload counting.
+        - record: cluster:node:nic:transmit_utilization:ratio
+          expr: |
+            (
+              rate(node_network_transmit_bytes_total[5m])
+            / on (instance, device)
+              (node_network_speed_bytes > 0)
+            )
+            * on (instance, device) group_left()
+              (node_network_carrier == 1)
+            * on (instance, device) group_left(duplex)
+              node_network_info{duplex!=""}
+
+        # Receive utilization: rate(rx_bytes) / speed_bytes.
+        - record: cluster:node:nic:receive_utilization:ratio
+          expr: |
+            (
+              rate(node_network_receive_bytes_total[5m])
+            / on (instance, device)
+              (node_network_speed_bytes > 0)
+            )
+            * on (instance, device) group_left()
+              (node_network_carrier == 1)
+            * on (instance, device) group_left(duplex)
+              node_network_info{duplex!=""}
+
+        # ── Node scope: packet drop rate ─────────────────────────
+        # Drops = valid packets discarded by the stack (ring buffer
+        # overflow, kernel queue full, memory pressure, or firewall
+        # policy).  Some baseline from policy drops is normal; a
+        # sustained increase indicates saturation.
+        - record: cluster:node:nic:drop_rate:packets_per_second
+          expr: |
+            (
+              rate(node_network_receive_drop_total[5m])
+            + rate(node_network_transmit_drop_total[5m])
+            )
+            * on (instance, device) group_left()
+              (node_network_carrier == 1)
+            * on (instance, device) group_left(duplex)
+              node_network_info{duplex!=""}
+
+        # ── Node scope: packet error rate ────────────────────────
+        # Errors = corrupted or malformed frames on the wire (CRC
+        # failures, runt/giant frames, carrier loss).  Always
+        # indicates a physical/hardware problem.  Normal value is 0.
+        - record: cluster:node:nic:error_rate:packets_per_second
+          expr: |
+            (
+              rate(node_network_receive_errs_total[5m])
+            + rate(node_network_transmit_errs_total[5m])
+            )
+            * on (instance, device) group_left()
+              (node_network_carrier == 1)
+            * on (instance, device) group_left(duplex)
+              node_network_info{duplex!=""}
+
+        # ── VM guest scope: per-VM network drop rate ─────────────
+        # KubeVirt exports per-VM per-interface network drops.
+        # Sum across interfaces for a per-VM total.
+        - record: vmi:network:drop_rate:packets_per_second
+          expr: |
+            sum by (namespace, name, node) (
+              rate(kubevirt_vmi_network_receive_packets_dropped_total[5m])
+            + rate(kubevirt_vmi_network_transmit_packets_dropped_total[5m])
+            )
+
+        # ── VM guest scope: per-VM network error rate ────────────
+        - record: vmi:network:error_rate:packets_per_second
+          expr: |
+            sum by (namespace, name, node) (
+              rate(kubevirt_vmi_network_receive_errors_total[5m])
+            + rate(kubevirt_vmi_network_transmit_errors_total[5m])
+            )
+
+        # ── VM guest scope: per-VM network throughput ────────────
+        # Useful for dashboarding; no capacity reference exists
+        # at the VM level so no utilization ratio is possible.
+        - record: vmi:network:throughput:bytes_per_second
+          expr: |
+            sum by (namespace, name, node) (
+              rate(kubevirt_vmi_network_receive_bytes_total[5m])
+            + rate(kubevirt_vmi_network_transmit_bytes_total[5m])
+            )

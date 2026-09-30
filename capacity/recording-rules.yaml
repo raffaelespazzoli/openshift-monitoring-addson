@@ -1,0 +1,293 @@
+# Capacity accounting, VM overcommit aggregates, virt-launcher overhead,
+# and time-to-exhaustion recording rules.
+#
+# Only nodes labeled kubevirt.io/schedulable=true are counted. That drops
+# nodes KubeVirt will not schedule virtual machines onto.
+#
+# capacity:nodes_down:count is the HA reserve: the largest schedulable node's
+# allocatable, multiplied by this count, is subtracted from total capacity.
+# Default is 1 (keep headroom for a single node failure).
+#
+# Metric names use underscores and a unit suffix. Prometheus metric names
+# cannot contain hyphens.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-management-capacity-rules
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: capacity-management.rules
+      rules:
+        - record: capacity:nodes_down:count
+          expr: vector(1)
+
+        # Memory. kube-state-metrics reports resource="memory" in bytes.
+        - record: cluster:total_capacity_memory:bytes
+          expr: |
+            sum(
+              kube_node_status_allocatable{resource="memory"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            -
+            (
+              max(
+                kube_node_status_allocatable{resource="memory"}
+                and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+              )
+              * capacity:nodes_down:count
+            )
+        - record: cluster:used_capacity_memory:bytes
+          expr: |
+            sum(
+              kube_pod_resource_request{resource="memory"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            or vector(0)
+        - record: cluster:available_capacity_memory:bytes
+          expr: cluster:total_capacity_memory:bytes - cluster:used_capacity_memory:bytes
+        - record: cluster:vm_used_capacity_memory:bytes
+          expr: |
+            sum(
+              kube_pod_resource_request{resource="memory",pod=~"virt-launcher-.*"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            or vector(0)
+        - record: cluster:non_vm_used_capacity_memory:bytes
+          expr: |
+            sum(
+              kube_pod_resource_request{resource="memory",pod!~"virt-launcher-.*"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            or vector(0)
+
+        # CPU. kube-state-metrics reports resource="cpu" in cores.
+        - record: cluster:total_capacity_cpu:cores
+          expr: |
+            sum(
+              kube_node_status_allocatable{resource="cpu"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            -
+            (
+              max(
+                kube_node_status_allocatable{resource="cpu"}
+                and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+              )
+              * capacity:nodes_down:count
+            )
+        - record: cluster:used_capacity_cpu:cores
+          expr: |
+            sum(
+              kube_pod_resource_request{resource="cpu"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            or vector(0)
+        - record: cluster:available_capacity_cpu:cores
+          expr: cluster:total_capacity_cpu:cores - cluster:used_capacity_cpu:cores
+        - record: cluster:vm_used_capacity_cpu:cores
+          expr: |
+            sum(
+              kube_pod_resource_request{resource="cpu",pod=~"virt-launcher-.*"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            or vector(0)
+        - record: cluster:non_vm_used_capacity_cpu:cores
+          expr: |
+            sum(
+              kube_pod_resource_request{resource="cpu",pod!~"virt-launcher-.*"}
+              and on(node) kube_node_labels{label_kubevirt_io_schedulable="true"}
+            )
+            or vector(0)
+
+        # GiB of memory request per CPU request.
+        - record: cluster:memory_cpu_ratio:gib_per_core
+          expr: |
+            cluster:used_capacity_memory:bytes
+            / (1024 * 1024 * 1024)
+            / scalar(cluster:used_capacity_cpu:cores)
+
+        # Actual usage from kubelet cAdvisor.
+        - record: cluster:vm_memory_usage:bytes
+          expr: |
+            sum(container_memory_working_set_bytes{pod=~"virt-launcher-.*",container!="",container!="POD"})
+            or vector(0)
+        - record: cluster:non_vm_memory_usage:bytes
+          expr: |
+            sum(container_memory_working_set_bytes{pod!~"virt-launcher-.*",container!="",container!="POD"})
+            or vector(0)
+        - record: cluster:vm_cpu_usage:cores
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{pod=~"virt-launcher-.*",container!="",container!="POD",cpu="total"}[5m]))
+            or vector(0)
+        - record: cluster:non_vm_cpu_usage:cores
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{pod!~"virt-launcher-.*",container!="",container!="POD",cpu="total"}[5m]))
+            or vector(0)
+
+        # ── VM overcommit statistical aggregates ─────────────────
+        - record: cluster:vm_memory_actual_used:bytes
+          expr: sum(kubevirt_vmi_memory_used_bytes) or vector(0)
+        - record: cluster:vm_cpu_actual_used:cores
+          expr: |
+            sum(rate(kubevirt_vmi_cpu_usage_seconds_total[5m])) or vector(0)
+
+    # Per-VM virt-launcher overhead: cAdvisor usage of the virt-launcher pod
+    # minus QEMU/domain usage reported by kubevirt_vmi_*. The join maps
+    # virt-launcher pod → VM name via kube_pod_info.created_by_name.
+    - name: virt-launcher-overhead.rules
+      rules:
+        - record: vmi:virt_launcher_overhead_memory:bytes
+          expr: |
+            sum by (namespace, name, node) (
+              container_memory_working_set_bytes{pod=~"virt-launcher-.*", container!="", container!="POD"}
+              * on(namespace, pod) group_left(name)
+                label_replace(
+                  kube_pod_info{created_by_kind="VirtualMachineInstance", pod=~"virt-launcher-.*"},
+                  "name", "$1", "created_by_name", "(.*)"
+                )
+            )
+            -
+            sum by (namespace, name, node) (
+              kubevirt_vmi_memory_resident_bytes
+            )
+        - record: vmi:virt_launcher_overhead_cpu:cores
+          expr: |
+            sum by (namespace, name, node) (
+              rate(container_cpu_usage_seconds_total{pod=~"virt-launcher-.*",container!="",container!="POD",cpu="total"}[5m])
+              * on(namespace, pod) group_left(name)
+                label_replace(
+                  kube_pod_info{created_by_kind="VirtualMachineInstance",pod=~"virt-launcher-.*"},
+                  "name", "$1", "created_by_name", "(.*)"
+                )
+            )
+            -
+            sum by (namespace, name, node) (
+              rate(kubevirt_vmi_cpu_usage_seconds_total[5m])
+            )
+
+    # Time-to-exhaustion rules.
+    - name: capacity-exhaustion.rules
+      rules:
+        # --- 7-day window ---------------------------------------------------
+        - record: cluster:days_to_exhaustion_memory_7d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_memory:bytes
+                  / deriv(cluster:available_capacity_memory:bytes[7d])
+                and
+                deriv(cluster:available_capacity_memory:bytes[7d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_cpu_7d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_cpu:cores
+                  / deriv(cluster:available_capacity_cpu:cores[7d])
+                and
+                deriv(cluster:available_capacity_cpu:cores[7d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_7d:days
+          expr: |
+            clamp_max(
+              cluster:days_to_exhaustion_memory_7d:days,
+              scalar(cluster:days_to_exhaustion_cpu_7d:days)
+            )
+
+        # --- 30-day window --------------------------------------------------
+        - record: cluster:days_to_exhaustion_memory_30d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_memory:bytes
+                  / deriv(cluster:available_capacity_memory:bytes[30d])
+                and
+                deriv(cluster:available_capacity_memory:bytes[30d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_cpu_30d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_cpu:cores
+                  / deriv(cluster:available_capacity_cpu:cores[30d])
+                and
+                deriv(cluster:available_capacity_cpu:cores[30d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_30d:days
+          expr: |
+            clamp_max(
+              cluster:days_to_exhaustion_memory_30d:days,
+              scalar(cluster:days_to_exhaustion_cpu_30d:days)
+            )
+
+        # --- 180-day window -------------------------------------------------
+        - record: cluster:days_to_exhaustion_memory_180d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_memory:bytes
+                  / deriv(cluster:available_capacity_memory:bytes[180d])
+                and
+                deriv(cluster:available_capacity_memory:bytes[180d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_cpu_180d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_cpu:cores
+                  / deriv(cluster:available_capacity_cpu:cores[180d])
+                and
+                deriv(cluster:available_capacity_cpu:cores[180d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_180d:days
+          expr: |
+            clamp_max(
+              cluster:days_to_exhaustion_memory_180d:days,
+              scalar(cluster:days_to_exhaustion_cpu_180d:days)
+            )
+
+        # --- 360-day window -------------------------------------------------
+        - record: cluster:days_to_exhaustion_memory_360d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_memory:bytes
+                  / deriv(cluster:available_capacity_memory:bytes[360d])
+                and
+                deriv(cluster:available_capacity_memory:bytes[360d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_cpu_360d:days
+          expr: |
+            (
+              (
+                - cluster:available_capacity_cpu:cores
+                  / deriv(cluster:available_capacity_cpu:cores[360d])
+                and
+                deriv(cluster:available_capacity_cpu:cores[360d]) < 0
+              )
+              or vector(+Inf)
+            ) / 86400
+        - record: cluster:days_to_exhaustion_360d:days
+          expr: |
+            clamp_max(
+              cluster:days_to_exhaustion_memory_360d:days,
+              scalar(cluster:days_to_exhaustion_cpu_360d:days)
+            )

@@ -1,0 +1,80 @@
+# CPU Pressure (PSI) recording rules.
+#
+# PSI (Pressure Stall Information) for CPU measures the fraction
+# of wall-clock time that at least one runnable task was waiting
+# for a CPU to become available.  Unlike memory and I/O, CPU PSI
+# only has a "some" flavor — there is no "full" because there is
+# always at least one task running on a CPU.
+#
+# CPU is a compressible resource: contention causes slowdowns
+# (increased scheduling latency) rather than failures (OOM kills).
+# Higher thresholds are appropriate compared to memory PSI.
+#
+# Scopes:
+#   node       = root cgroup id="/"    (all processes on the node)
+#   pod        = pod cgroup (container="", pod!="")
+#   container  = container cgroup (container!="", container!="POD")
+#   vm (guest) = kubevirt_vmi_vcpu_delay_seconds_total (vCPU delay)
+#
+# Requires cgroupv2 and kernel >= 4.20 (same as memory PSI).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-management-cpu-rules
+  namespace: openshift-monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: capacity-management-cpu-pressure.rules
+      rules:
+        # Node-wide CPU pressure from the root cgroup.
+        # Mirrors cluster:node:memory:pressure:ratio.
+        - record: cluster:node:cpu:pressure:ratio
+          expr: |
+            rate(
+              container_pressure_cpu_waiting_seconds_total{id="/"}[5m]
+            )
+
+        # Per-pod CPU pressure from pod-level cgroups.
+        # container="" selects the pod cgroup aggregate (same
+        # convention as pod:memory:working_set_utilization:ratio).
+        - record: pod:cpu:pressure:ratio
+          expr: |
+            rate(
+              container_pressure_cpu_waiting_seconds_total{container="", pod!=""}[5m]
+            )
+
+        # Per-container CPU pressure.
+        - record: container:cpu:pressure:ratio
+          expr: |
+            rate(
+              container_pressure_cpu_waiting_seconds_total{container!="", container!="POD"}[5m]
+            )
+
+        # ── VM guest: vCPU host-scheduling delay ──────────────────
+        #
+        # kubevirt_vmi_vcpu_delay_seconds_total is a counter that
+        # accumulates the time each vCPU spent "waiting in the host
+        # scheduler queue instead of running."  This is the VM-level
+        # equivalent of CPU PSI: the guest was ready to run but the
+        # host hadn't scheduled the vCPU onto a physical core yet.
+        #
+        # NOTE: Do NOT confuse with kubevirt_vmi_vcpu_wait_seconds_total
+        # which measures vCPU I/O wait, not CPU scheduling delay.
+        #
+        # The sum aggregates across all vCPUs of a VM.  A value of
+        # 1.0 means one vCPU-second of delay per wall-clock second —
+        # e.g. one vCPU was fully stalled, or two vCPUs were each
+        # 50% stalled.  Values > 1.0 are possible with many vCPUs.
+        #
+        # KubeVirt already ships guest-internal CPU saturation alerts
+        # (GuestVCPUQueueHighWarning/Critical) based on guest OS load
+        # vs vCPU count.  This metric captures the HOST side:
+        # is the host giving this VM enough CPU time?
+        - record: vmi:cpu:vcpu_delay:ratio
+          expr: |
+            sum by (namespace, name, node) (
+              rate(kubevirt_vmi_vcpu_delay_seconds_total[5m])
+            )
