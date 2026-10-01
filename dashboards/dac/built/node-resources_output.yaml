@@ -8,7 +8,7 @@ metadata:
 spec:
   display:
     name: Node Resources
-    description: 'Per-node resource overview: memory decomposition & PSI, CPU utilization & PSI, NIC saturation, I/O pressure, Fibre Channel, and multipath health.'
+    description: 'Per-node resource overview: memory utilization & PSI, CPU utilization & PSI, NIC saturation, I/O pressure, Fibre Channel, and multipath health.'
   variables:
     - kind: ListVariable
       spec:
@@ -101,15 +101,23 @@ spec:
       kind: Panel
       spec:
         display:
-          name: Workload utilization
-          description: kubepods.slice working_set / allocatable (kubelet eviction metric)
+          name: Workload Utilization
+          description: kubepods.slice working_set / allocatable — the kubelet eviction metric
         plugin:
-          kind: StatChart
+          kind: GaugeChart
           spec:
             calculation: last-number
             format:
               unit: percent
               decimalPlaces: 1
+            thresholds:
+              steps:
+                - value: 0
+                  color: '#32ac2d'
+                - value: 0.80
+                  color: '#ed8128'
+                - value: 0.95
+                  color: '#f53636'
         queries:
           - kind: TimeSeriesQuery
             spec:
@@ -143,28 +151,8 @@ spec:
       kind: Panel
       spec:
         display:
-          name: System used
-          description: system.slice total usage (can exceed reserved via file cache)
-        plugin:
-          kind: StatChart
-          spec:
-            calculation: last-number
-            format:
-              unit: bytes
-              decimalPlaces: 1
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:system_used:bytes{node=~"$node"})
-    "1_0":
-      kind: Panel
-      spec:
-        display:
-          name: Memory Pressure
-          description: Fraction of wall-clock time at least one process was stalled waiting for memory reclaim. Root cgroup (node-wide). Requires cgroup v2.
+          name: System Used
+          description: system.slice total memory (can exceed reserved via file cache)
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -173,8 +161,35 @@ spec:
               mode: list
             visual:
               display: line
-              areaOpacity: 0
-              lineWidth: 2
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:system_used:bytes{node=~"$node"})
+                  seriesNameFormat: '{{node}}'
+    "0_5":
+      kind: Panel
+      spec:
+        display:
+          name: Memory Pressure
+          description: PSI — fraction of time processes stalled waiting for memory reclaim
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
             yAxis:
               format:
                 unit: percent
@@ -186,202 +201,7 @@ spec:
                 spec:
                   query: node:memory:pressure:ratio{node=~"$node"}
                   seriesNameFormat: '{{node}}'
-    "2_0":
-      kind: Panel
-      spec:
-        display:
-          name: Node Total
-          description: 'Full node memory: system + workloads. Total height = node capacity.'
-        plugin:
-          kind: TimeSeriesChart
-          spec:
-            legend:
-              position: bottom
-              mode: list
-            visual:
-              display: line
-              areaOpacity: 0.7
-              lineWidth: 2
-              stack: all
-            querySettings:
-              - queryIndex: 5
-                colorMode: fixed-single
-                colorValue: '#FFFFFF'
-                lineStyle: dotted
-                stack: false
-                areaOpacity: 0
-            yAxis:
-              format:
-                unit: bytes
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_non_reclaimable:bytes{node=~"$node"}) + sum(node:memory:system_non_reclaimable:bytes{node=~"$node"})
-                  seriesNameFormat: Non-reclaimable (anon)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_overhead:bytes{node=~"$node"}) + sum(node:memory:system_overhead:bytes{node=~"$node"})
-                  seriesNameFormat: Kernel overhead
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_hot_reclaimable:bytes{node=~"$node"}) + sum(node:memory:system_hot_reclaimable:bytes{node=~"$node"})
-                  seriesNameFormat: Reclaimable hot (active file)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_cold:bytes{node=~"$node"}) + sum(node:memory:system_cold:bytes{node=~"$node"})
-                  seriesNameFormat: Reclaimable cold (inactive file)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: |-
-                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-                    - sum(node:memory:workloads_used:bytes{node=~"$node"})
-                    - sum(node:memory:system_used:bytes{node=~"$node"})
-                  seriesNameFormat: Free
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
-                  seriesNameFormat: ── Allocatable
-    "2_1":
-      kind: Panel
-      spec:
-        display:
-          name: Workloads (kubepods.slice)
-          description: Pod memory only. Total height = node allocatable.
-        plugin:
-          kind: TimeSeriesChart
-          spec:
-            legend:
-              position: bottom
-              mode: list
-            visual:
-              display: line
-              areaOpacity: 0.7
-              stack: all
-            yAxis:
-              format:
-                unit: bytes
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_non_reclaimable:bytes{node=~"$node"})
-                  seriesNameFormat: Non-reclaimable (anon)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_overhead:bytes{node=~"$node"})
-                  seriesNameFormat: Kernel overhead
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_hot_reclaimable:bytes{node=~"$node"})
-                  seriesNameFormat: Reclaimable hot (active file)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_cold:bytes{node=~"$node"})
-                  seriesNameFormat: Reclaimable cold (inactive file)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: |-
-                    sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
-                    - sum(node:memory:workloads_used:bytes{node=~"$node"})
-                  seriesNameFormat: Free
-    "2_2":
-      kind: Panel
-      spec:
-        display:
-          name: System (system.slice)
-          description: OS and Kubernetes system services. Compare with Reserved stat above — system usage commonly exceeds reservation due to file cache.
-        plugin:
-          kind: TimeSeriesChart
-          spec:
-            legend:
-              position: bottom
-              mode: list
-            visual:
-              display: line
-              areaOpacity: 0.7
-              lineWidth: 2
-              stack: all
-            querySettings:
-              - queryIndex: 4
-                colorMode: fixed-single
-                colorValue: '#FF8C00'
-                lineStyle: dotted
-                stack: false
-                areaOpacity: 0
-            yAxis:
-              format:
-                unit: bytes
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:system_non_reclaimable:bytes{node=~"$node"})
-                  seriesNameFormat: Non-reclaimable (anon)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:system_overhead:bytes{node=~"$node"})
-                  seriesNameFormat: Kernel overhead
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:system_hot_reclaimable:bytes{node=~"$node"})
-                  seriesNameFormat: Reclaimable hot (active file)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:system_cold:bytes{node=~"$node"})
-                  seriesNameFormat: Reclaimable cold (inactive file)
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: |-
-                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-                    - sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
-                  seriesNameFormat: ── Reserved
-    "3_0":
+    "1_0":
       kind: Panel
       spec:
         display:
@@ -400,7 +220,7 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
-    "3_1":
+    "1_1":
       kind: Panel
       spec:
         display:
@@ -419,19 +239,27 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
-    "3_2":
+    "1_2":
       kind: Panel
       spec:
         display:
-          name: Workload utilization
+          name: Workload Utilization
           description: kubepods.slice CPU usage / allocatable
         plugin:
-          kind: StatChart
+          kind: GaugeChart
           spec:
             calculation: last-number
             format:
               unit: percent
               decimalPlaces: 1
+            thresholds:
+              steps:
+                - value: 0
+                  color: '#32ac2d'
+                - value: 0.80
+                  color: '#ed8128'
+                - value: 0.95
+                  color: '#f53636'
         queries:
           - kind: TimeSeriesQuery
             spec:
@@ -441,12 +269,12 @@ spec:
                   query: |-
                     sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", node=~"$node"}[5m]))
                     / sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
-    "4_0":
+    "1_3":
       kind: Panel
       spec:
         display:
-          name: CPU Pressure
-          description: Fraction of wall-clock time at least one runnable task was waiting for CPU. Root cgroup (node-wide). CPU PSI only has a "some" flavor — there is no "full" because there is always at least one task running.
+          name: System Used
+          description: system.slice CPU usage (cores)
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -455,8 +283,35 @@ spec:
               mode: list
             visual:
               display: line
-              areaOpacity: 0
-              lineWidth: 2
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: decimal
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(container_cpu_usage_seconds_total{id="/system.slice", node=~"$node"}[5m]))
+                  seriesNameFormat: '{{node}}'
+    "1_4":
+      kind: Panel
+      spec:
+        display:
+          name: CPU Pressure
+          description: PSI — fraction of time runnable tasks waited for a CPU
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
             yAxis:
               format:
                 unit: percent
@@ -468,12 +323,12 @@ spec:
                 spec:
                   query: node:cpu:pressure:ratio{node=~"$node"}
                   seriesNameFormat: '{{node}}'
-    "5_0":
+    "2_0":
       kind: Panel
       spec:
         display:
           name: NIC Utilization
-          description: Transmit and receive utilization vs link speed for physical NICs. Filtered by $nic variable.
+          description: Transmit and receive utilization vs link speed for physical NICs.
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -502,12 +357,12 @@ spec:
                 spec:
                   query: node_nic:network:receive_utilization:ratio{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: RX {{device}}
-    "5_1":
+    "2_1":
       kind: Panel
       spec:
         display:
           name: NIC Drops & Errors
-          description: Packet drops (software stack — ring buffer overflow, queue full) and errors (physical layer — CRC failures, runt frames). Normal error rate is 0.
+          description: Packet drops (ring buffer overflow) and errors (CRC failures). Normal rate is 0.
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -536,12 +391,12 @@ spec:
                 spec:
                   query: node_nic:network:error_rate:packets_per_second{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: Errors {{device}}
-    "6_0":
+    "3_0":
       kind: Panel
       spec:
         display:
           name: I/O Pressure — Waiting (some)
-          description: Fraction of wall-clock time at least one task was stalled waiting for block I/O. Root cgroup (node-wide).
+          description: Fraction of wall-clock time at least one task was stalled waiting for block I/O.
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -563,12 +418,12 @@ spec:
                 spec:
                   query: node:io:pressure_waiting:ratio{node=~"$node"}
                   seriesNameFormat: '{{node}}'
-    "6_1":
+    "3_1":
       kind: Panel
       spec:
         display:
           name: I/O Pressure — Stalled (full)
-          description: Fraction of wall-clock time ALL tasks were stalled on I/O (zero CPU progress). Much more severe than 'some'.
+          description: Fraction of wall-clock time ALL tasks were stalled on I/O (zero CPU progress).
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -590,12 +445,12 @@ spec:
                 spec:
                   query: node:io:pressure_stalled:ratio{node=~"$node"}
                   seriesNameFormat: '{{node}}'
-    "7_0":
+    "4_0":
       kind: Panel
       spec:
         display:
           name: FC HBA Utilization
-          description: Transmit and receive utilization vs port link speed. Filtered by $hba variable.
+          description: Transmit and receive utilization vs port link speed.
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -624,12 +479,12 @@ spec:
                 spec:
                   query: node_hba:fc:receive_utilization:ratio{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: RX {{fc_host}}
-    "7_1":
+    "4_1":
       kind: Panel
       spec:
         display:
           name: FC Errors & Link Loss
-          description: CRC/frame errors and loss-of-signal/sync events. Normal value is 0 — any sustained rate indicates a physical layer problem.
+          description: CRC/frame errors and loss-of-signal/sync events. Normal value is 0.
         plugin:
           kind: TimeSeriesChart
           spec:
@@ -658,7 +513,7 @@ spec:
                 spec:
                   query: node_hba:fc:link_loss_rate:per_second{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: Link loss {{fc_host}}
-    "8_0":
+    "5_0":
       kind: Panel
       spec:
         display:
@@ -678,7 +533,7 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: count(node_dmmultipath_device_active{instance=~"$node"})
-    "8_1":
+    "5_1":
       kind: Panel
       spec:
         display:
@@ -698,7 +553,7 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: sum(node_dmmultipath_device_paths{instance=~"$node"})
-    "8_2":
+    "5_2":
       kind: Panel
       spec:
         display:
@@ -728,7 +583,7 @@ spec:
     - kind: Grid
       spec:
         display:
-          title: Memory Summary
+          title: Memory
         items:
           - x: 0
             "y": 0
@@ -760,74 +615,47 @@ spec:
             height: 8
             content:
               $ref: '#/spec/panels/0_4'
+          - x: 20
+            "y": 0
+            width: 4
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_5'
     - kind: Grid
       spec:
         display:
-          title: Memory Saturation (PSI)
+          title: CPU
         items:
           - x: 0
             "y": 0
-            width: 24
-            height: 10
+            width: 4
+            height: 8
             content:
               $ref: '#/spec/panels/1_0'
-    - kind: Grid
-      spec:
-        display:
-          title: Memory Decomposition
-        items:
-          - x: 0
+          - x: 4
             "y": 0
-            width: 8
-            height: 14
+            width: 4
+            height: 8
             content:
-              $ref: '#/spec/panels/2_0'
+              $ref: '#/spec/panels/1_1'
           - x: 8
             "y": 0
-            width: 8
-            height: 14
+            width: 4
+            height: 8
             content:
-              $ref: '#/spec/panels/2_1'
+              $ref: '#/spec/panels/1_2'
+          - x: 12
+            "y": 0
+            width: 4
+            height: 8
+            content:
+              $ref: '#/spec/panels/1_3'
           - x: 16
             "y": 0
-            width: 8
-            height: 14
-            content:
-              $ref: '#/spec/panels/2_2'
-    - kind: Grid
-      spec:
-        display:
-          title: CPU Summary
-        items:
-          - x: 0
-            "y": 0
-            width: 8
+            width: 4
             height: 8
             content:
-              $ref: '#/spec/panels/3_0'
-          - x: 8
-            "y": 0
-            width: 8
-            height: 8
-            content:
-              $ref: '#/spec/panels/3_1'
-          - x: 16
-            "y": 0
-            width: 8
-            height: 8
-            content:
-              $ref: '#/spec/panels/3_2'
-    - kind: Grid
-      spec:
-        display:
-          title: CPU Saturation (PSI)
-        items:
-          - x: 0
-            "y": 0
-            width: 24
-            height: 10
-            content:
-              $ref: '#/spec/panels/4_0'
+              $ref: '#/spec/panels/1_4'
     - kind: Grid
       spec:
         display:
@@ -838,13 +666,13 @@ spec:
             width: 12
             height: 10
             content:
-              $ref: '#/spec/panels/5_0'
+              $ref: '#/spec/panels/2_0'
           - x: 12
             "y": 0
             width: 12
             height: 10
             content:
-              $ref: '#/spec/panels/5_1'
+              $ref: '#/spec/panels/2_1'
     - kind: Grid
       spec:
         display:
@@ -855,13 +683,13 @@ spec:
             width: 12
             height: 10
             content:
-              $ref: '#/spec/panels/6_0'
+              $ref: '#/spec/panels/3_0'
           - x: 12
             "y": 0
             width: 12
             height: 10
             content:
-              $ref: '#/spec/panels/6_1'
+              $ref: '#/spec/panels/3_1'
     - kind: Grid
       spec:
         display:
@@ -872,13 +700,13 @@ spec:
             width: 12
             height: 10
             content:
-              $ref: '#/spec/panels/7_0'
+              $ref: '#/spec/panels/4_0'
           - x: 12
             "y": 0
             width: 12
             height: 10
             content:
-              $ref: '#/spec/panels/7_1'
+              $ref: '#/spec/panels/4_1'
     - kind: Grid
       spec:
         display:
@@ -889,17 +717,17 @@ spec:
             width: 8
             height: 8
             content:
-              $ref: '#/spec/panels/8_0'
+              $ref: '#/spec/panels/5_0'
           - x: 8
             "y": 0
             width: 8
             height: 8
             content:
-              $ref: '#/spec/panels/8_1'
+              $ref: '#/spec/panels/5_1'
           - x: 16
             "y": 0
             width: 8
             height: 8
             content:
-              $ref: '#/spec/panels/8_2'
+              $ref: '#/spec/panels/5_2'
   duration: 6h

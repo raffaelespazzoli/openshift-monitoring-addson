@@ -14,22 +14,49 @@ import (
 // Chart templates
 // ══════════════════════════════════════════════════════════════════════
 
-// Stacked area chart — memory decomposition panels.
-#stackedAreaChart: {
+// Gauge chart — workload utilization ratio with color thresholds.
+#gaugeChart: {
+	kind: "GaugeChart"
+	spec: {
+		calculation: "last-number"
+		format: {
+			unit:          "percent"
+			decimalPlaces: 1
+		}
+		thresholds: {
+			steps: [
+				{value: 0, color: "#32ac2d"},
+				{value: 0.80, color: "#ed8128"},
+				{value: 0.95, color: "#f53636"},
+			]
+		}
+	}
+}
+
+// Compact time series — used inline in summary rows for system used
+// and PSI pressure.  No legend (too small), thin lines.
+#sparkBytes: {
 	kind: "TimeSeriesChart"
 	spec: {
-		legend: {
-			position: "bottom"
-			mode:     "list"
-		}
-		visual: {
-			display:     "line"
-			areaOpacity: 0.7
-			stack:       "all"
-			...
-		}
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
 		yAxis: format: unit: "bytes"
-		...
+	}
+}
+#sparkRatio: {
+	kind: "TimeSeriesChart"
+	spec: {
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
+		yAxis: format: unit: "percent"
+	}
+}
+#sparkCores: {
+	kind: "TimeSeriesChart"
+	spec: {
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
+		yAxis: format: unit: "decimal"
 	}
 }
 
@@ -37,18 +64,9 @@ import (
 #ratioChart: {
 	kind: "TimeSeriesChart"
 	spec: {
-		legend: {
-			position: "bottom"
-			mode:     "list"
-		}
-		visual: {
-			display:     "line"
-			areaOpacity: 0
-			lineWidth:   2
-			...
-		}
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0, lineWidth: 2}
 		yAxis: format: unit: "percent"
-		...
 	}
 }
 
@@ -56,18 +74,9 @@ import (
 #rateChart: {
 	kind: "TimeSeriesChart"
 	spec: {
-		legend: {
-			position: "bottom"
-			mode:     "list"
-		}
-		visual: {
-			display:     "line"
-			areaOpacity: 0
-			lineWidth:   2
-			...
-		}
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0, lineWidth: 2}
 		yAxis: format: unit: "decimal"
-		...
 	}
 }
 
@@ -91,40 +100,8 @@ import (
 // MEMORY — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-// Per-node vs all-nodes aggregation: when $node is ".*" (all nodes),
-// sum() aggregates across nodes so charts show a single stacked area.
-// All queries reference recording rules from the memory area which
-// pre-aggregate cAdvisor metrics by node.
-
 _wk: "{node=~\"$node\"}"
 _sy: "{node=~\"$node\"}"
-
-// Panel 1: Full node — stacks: non-reclaimable, overhead, hot, cold, free.
-#p1_nonReclaim:  "sum(node:memory:workloads_non_reclaimable:bytes" + _wk + ") + sum(node:memory:system_non_reclaimable:bytes" + _sy + ")"
-#p1_overhead:    "sum(node:memory:workloads_overhead:bytes" + _wk + ") + sum(node:memory:system_overhead:bytes" + _sy + ")"
-#p1_hotReclaim:  "sum(node:memory:workloads_hot_reclaimable:bytes" + _wk + ") + sum(node:memory:system_hot_reclaimable:bytes" + _sy + ")"
-#p1_coldReclaim: "sum(node:memory:workloads_cold:bytes" + _wk + ") + sum(node:memory:system_cold:bytes" + _sy + ")"
-#p1_free: """
-	sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-	- sum(node:memory:workloads_used:bytes\( _wk ))
-	- sum(node:memory:system_used:bytes\( _sy ))
-	"""
-
-// Panel 2: Workloads (kubepods.slice) — total = allocatable.
-#p2_nonReclaim:  "sum(node:memory:workloads_non_reclaimable:bytes" + _wk + ")"
-#p2_overhead:    "sum(node:memory:workloads_overhead:bytes" + _wk + ")"
-#p2_hotReclaim:  "sum(node:memory:workloads_hot_reclaimable:bytes" + _wk + ")"
-#p2_coldReclaim: "sum(node:memory:workloads_cold:bytes" + _wk + ")"
-#p2_free: """
-	sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
-	- sum(node:memory:workloads_used:bytes\( _wk ))
-	"""
-
-// Panel 3: System (system.slice) — no cap.
-#p3_nonReclaim:  "sum(node:memory:system_non_reclaimable:bytes" + _sy + ")"
-#p3_overhead:    "sum(node:memory:system_overhead:bytes" + _sy + ")"
-#p3_hotReclaim:  "sum(node:memory:system_hot_reclaimable:bytes" + _sy + ")"
-#p3_coldReclaim: "sum(node:memory:system_cold:bytes" + _sy + ")"
 
 // Summary stats.
 #allocatable:         "sum(kube_node_status_allocatable{resource=\"memory\", node=~\"$node\"})"
@@ -147,16 +124,13 @@ _sy: "{node=~\"$node\"}"
 	sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", node=~"$node"}[5m]))
 	/ sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
 	"""
-#cpuPSI: "node:cpu:pressure:ratio{node=~\"$node\"}"
+#cpuSystemUsed: "sum(rate(container_cpu_usage_seconds_total{id=\"/system.slice\", node=~\"$node\"}[5m]))"
+#cpuPSI:        "node:cpu:pressure:ratio{node=~\"$node\"}"
 
 // ══════════════════════════════════════════════════════════════════════
 // NETWORKING — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-// node_exporter metrics carry {instance} (= node hostname) but NOT
-// {node}.  cAdvisor metrics carry {node} but instance is IP:port.
-// The $node variable matches both: kube-state node names equal the
-// node_exporter instance hostnames in OpenShift.
 _netFilter: "{instance=~\"$node\", device=~\"$nic\"}"
 #netTxUtil:  "node_nic:network:transmit_utilization:ratio" + _netFilter
 #netRxUtil:  "node_nic:network:receive_utilization:ratio" + _netFilter
@@ -167,19 +141,15 @@ _netFilter: "{instance=~\"$node\", device=~\"$nic\"}"
 // STORAGE — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-// I/O PSI from cAdvisor root cgroup — already carries {node}.
 #ioPSIWaiting: "node:io:pressure_waiting:ratio{node=~\"$node\"}"
 #ioPSIStalled: "node:io:pressure_stalled:ratio{node=~\"$node\"}"
 
-// FC HBA recording rules use node_exporter — match via {instance}.
 _fcFilter: "{instance=~\"$node\", fc_host=~\"$hba\"}"
 #fcTxUtil:   "node_hba:fc:transmit_utilization:ratio" + _fcFilter
 #fcRxUtil:   "node_hba:fc:receive_utilization:ratio" + _fcFilter
 #fcErrors:   "node_hba:fc:error_rate:frames_per_second" + _fcFilter
 #fcLinkLoss: "node_hba:fc:link_loss_rate:per_second" + _fcFilter
 
-// DM-multipath raw node_exporter metrics — match via {instance}.
-// No-op on clusters without the dmmultipath collector enabled.
 #mpathDevices:     "count(node_dmmultipath_device_active{instance=~\"$node\"})"
 #mpathTotalPaths:  "sum(node_dmmultipath_device_paths{instance=~\"$node\"})"
 #mpathFailedPaths: "sum(node_dmmultipath_device_paths_failed{instance=~\"$node\"})"
@@ -193,14 +163,10 @@ dashboardBuilder & {
 	#project: "perses"
 	#display: {
 		name:        "Node Resources"
-		description: "Per-node resource overview: memory decomposition & PSI, CPU utilization & PSI, NIC saturation, I/O pressure, Fibre Channel, and multipath health."
+		description: "Per-node resource overview: memory utilization & PSI, CPU utilization & PSI, NIC saturation, I/O pressure, Fibre Channel, and multipath health."
 	}
 	#duration: "6h"
 
-	// ── Variables ────────────────────────────────────────────────
-	// Perses does not support section-level variables; all appear
-	// at dashboard level.  NIC and HBA are chained from $node so
-	// they only list devices present on the selected node.
 	#variables: {varGroupBuilder & {
 		#input: [
 			labelValuesVarBuilder & {
@@ -230,82 +196,64 @@ dashboardBuilder & {
 		]
 	}}.variables
 
-	// ── Panel groups ────────────────────────────────────────────
 	#panelGroups: panelGroupsBuilder & {
 		#input: [
 
 			// ═══════════════════════════════════════════════════
-			// MEMORY
+			// MEMORY — single compact row: stats + gauge + graphs
 			// ═══════════════════════════════════════════════════
-
-			// ── Memory Summary (stats) ───────────────────────
 			{
-				#title: "Memory Summary"
-				#cols:  5
+				#title:  "Memory"
+				#cols:   6
+				#height: 8
 				#panels: [
+					// 1. Capacity (stat)
 					panelBuilder & {
 						spec: {
 							display: name: "Capacity"
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "bytes"
-										decimalPlaces: 1
-									}
+									format: {unit: "bytes", decimalPlaces: 1}
 								}
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #capacity
-								}
+								spec: plugin: promQuery & {spec: query: #capacity}
 							}]
 						}
 					},
+					// 2. Allocatable (stat)
 					panelBuilder & {
 						spec: {
 							display: name: "Allocatable"
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "bytes"
-										decimalPlaces: 1
-									}
+									format: {unit: "bytes", decimalPlaces: 1}
 								}
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #allocatable
-								}
+								spec: plugin: promQuery & {spec: query: #allocatable}
 							}]
 						}
 					},
+					// 3. Workload utilization (gauge)
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Workload utilization"
-								description: "kubepods.slice working_set / allocatable (kubelet eviction metric)"
+								name:        "Workload Utilization"
+								description: "kubepods.slice working_set / allocatable — the kubelet eviction metric"
 							}
-							plugin: statChart & {
-								spec: {
-									calculation: "last-number"
-									format: {
-										unit:          "percent"
-										decimalPlaces: 1
-									}
-								}
-							}
+							plugin: #gaugeChart
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #workloadUtilization
-								}
+								spec: plugin: promQuery & {spec: query: #workloadUtilization}
 							}]
 						}
 					},
+					// 4. Reserved (stat)
 					panelBuilder & {
 						spec: {
 							display: {
@@ -315,59 +263,36 @@ dashboardBuilder & {
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "bytes"
-										decimalPlaces: 1
-									}
+									format: {unit: "bytes", decimalPlaces: 1}
 								}
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #reserved
-								}
+								spec: plugin: promQuery & {spec: query: #reserved}
 							}]
 						}
 					},
+					// 5. System used (time series graph)
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "System used"
-								description: "system.slice total usage (can exceed reserved via file cache)"
+								name:        "System Used"
+								description: "system.slice total memory (can exceed reserved via file cache)"
 							}
-							plugin: statChart & {
-								spec: {
-									calculation: "last-number"
-									format: {
-										unit:          "bytes"
-										decimalPlaces: 1
-									}
-								}
-							}
-							queries: [{
-								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #systemUsed
-								}
-							}]
+							plugin: #sparkBytes
+							queries: [
+								{#tsQuery & {#query: #systemUsed, #format: "{{node}}"}},
+							]
 						}
 					},
-				]
-			},
-
-			// ── Memory Saturation (PSI) ──────────────────────
-			{
-				#title:  "Memory Saturation (PSI)"
-				#cols:   1
-				#height: 10
-				#panels: [
+					// 6. Memory Pressure (time series graph — PSI)
 					panelBuilder & {
 						spec: {
 							display: {
 								name:        "Memory Pressure"
-								description: "Fraction of wall-clock time at least one process was stalled waiting for memory reclaim. Root cgroup (node-wide). Requires cgroup v2."
+								description: "PSI — fraction of time processes stalled waiting for memory reclaim"
 							}
-							plugin: #ratioChart
+							plugin: #sparkRatio
 							queries: [
 								{#tsQuery & {#query: #memoryPSI, #format: "{{node}}"}},
 							]
@@ -376,229 +301,81 @@ dashboardBuilder & {
 				]
 			},
 
-			// ── Memory Decomposition ─────────────────────────
-			{
-				#title:  "Memory Decomposition"
-				#cols:   3
-				#height: 14
-				#panels: [
-					// Panel 1: Full Node
-					panelBuilder & {
-						spec: {
-							display: {
-								name:        "Node Total"
-								description: "Full node memory: system + workloads. Total height = node capacity."
-							}
-							plugin: #stackedAreaChart & {
-								spec: {
-									visual: lineWidth: 2
-									querySettings: [{
-										queryIndex: 5
-										colorMode:  "fixed-single"
-										colorValue: "#FFFFFF"
-										lineStyle:  "dotted"
-										stack:      false
-										areaOpacity: 0
-									}]
-								}
-							}
-							queries: [
-								#tsQuery & {
-									#format: "Non-reclaimable (anon)"
-									#query:  #p1_nonReclaim
-								},
-								#tsQuery & {
-									#format: "Kernel overhead"
-									#query:  #p1_overhead
-								},
-								#tsQuery & {
-									#format: "Reclaimable hot (active file)"
-									#query:  #p1_hotReclaim
-								},
-								#tsQuery & {
-									#format: "Reclaimable cold (inactive file)"
-									#query:  #p1_coldReclaim
-								},
-								#tsQuery & {
-									#format: "Free"
-									#query:  #p1_free
-								},
-								#tsQuery & {
-									#format: "── Allocatable"
-									#query:  #allocatable
-								},
-							]
-						}
-					},
-
-					// Panel 2: Workloads (kubepods.slice)
-					panelBuilder & {
-						spec: {
-							display: {
-								name:        "Workloads (kubepods.slice)"
-								description: "Pod memory only. Total height = node allocatable."
-							}
-							plugin: #stackedAreaChart
-							queries: [
-								#tsQuery & {
-									#format: "Non-reclaimable (anon)"
-									#query:  #p2_nonReclaim
-								},
-								#tsQuery & {
-									#format: "Kernel overhead"
-									#query:  #p2_overhead
-								},
-								#tsQuery & {
-									#format: "Reclaimable hot (active file)"
-									#query:  #p2_hotReclaim
-								},
-								#tsQuery & {
-									#format: "Reclaimable cold (inactive file)"
-									#query:  #p2_coldReclaim
-								},
-								#tsQuery & {
-									#format: "Free"
-									#query:  #p2_free
-								},
-							]
-						}
-					},
-
-					// Panel 3: System (system.slice)
-					panelBuilder & {
-						spec: {
-							display: {
-								name:        "System (system.slice)"
-								description: "OS and Kubernetes system services. Compare with Reserved stat above — system usage commonly exceeds reservation due to file cache."
-							}
-							plugin: #stackedAreaChart & {
-								spec: {
-									visual: lineWidth: 2
-									querySettings: [{
-										queryIndex: 4
-										colorMode:  "fixed-single"
-										colorValue: "#FF8C00"
-										lineStyle:  "dotted"
-										stack:      false
-										areaOpacity: 0
-									}]
-								}
-							}
-							queries: [
-								#tsQuery & {
-									#format: "Non-reclaimable (anon)"
-									#query:  #p3_nonReclaim
-								},
-								#tsQuery & {
-									#format: "Kernel overhead"
-									#query:  #p3_overhead
-								},
-								#tsQuery & {
-									#format: "Reclaimable hot (active file)"
-									#query:  #p3_hotReclaim
-								},
-								#tsQuery & {
-									#format: "Reclaimable cold (inactive file)"
-									#query:  #p3_coldReclaim
-								},
-								#tsQuery & {
-									#format: "── Reserved"
-									#query:  #reserved
-								},
-							]
-						}
-					},
-				]
-			},
-
 			// ═══════════════════════════════════════════════════
-			// CPU
+			// CPU — single compact row: stats + gauge + graphs
 			// ═══════════════════════════════════════════════════
-
-			// ── CPU Summary (stats) ──────────────────────────
 			{
-				#title: "CPU Summary"
-				#cols:  3
+				#title:  "CPU"
+				#cols:   5
+				#height: 8
 				#panels: [
+					// 1. Capacity (stat)
 					panelBuilder & {
 						spec: {
 							display: name: "Capacity"
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "decimal"
-										decimalPlaces: 1
-									}
+									format: {unit: "decimal", decimalPlaces: 1}
 								}
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #cpuCapacity
-								}
+								spec: plugin: promQuery & {spec: query: #cpuCapacity}
 							}]
 						}
 					},
+					// 2. Allocatable (stat)
 					panelBuilder & {
 						spec: {
 							display: name: "Allocatable"
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "decimal"
-										decimalPlaces: 1
-									}
+									format: {unit: "decimal", decimalPlaces: 1}
 								}
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #cpuAllocatable
-								}
+								spec: plugin: promQuery & {spec: query: #cpuAllocatable}
 							}]
 						}
 					},
+					// 3. Workload utilization (gauge)
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Workload utilization"
+								name:        "Workload Utilization"
 								description: "kubepods.slice CPU usage / allocatable"
 							}
-							plugin: statChart & {
-								spec: {
-									calculation: "last-number"
-									format: {
-										unit:          "percent"
-										decimalPlaces: 1
-									}
-								}
-							}
+							plugin: #gaugeChart
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #cpuUtilization
-								}
+								spec: plugin: promQuery & {spec: query: #cpuUtilization}
 							}]
 						}
 					},
-				]
-			},
-
-			// ── CPU Saturation (PSI) ─────────────────────────
-			{
-				#title:  "CPU Saturation (PSI)"
-				#cols:   1
-				#height: 10
-				#panels: [
+					// 4. System CPU used (time series graph)
+					panelBuilder & {
+						spec: {
+							display: {
+								name:        "System Used"
+								description: "system.slice CPU usage (cores)"
+							}
+							plugin: #sparkCores
+							queries: [
+								{#tsQuery & {#query: #cpuSystemUsed, #format: "{{node}}"}},
+							]
+						}
+					},
+					// 5. CPU Pressure (time series graph — PSI)
 					panelBuilder & {
 						spec: {
 							display: {
 								name:        "CPU Pressure"
-								description: "Fraction of wall-clock time at least one runnable task was waiting for CPU. Root cgroup (node-wide). CPU PSI only has a \"some\" flavor — there is no \"full\" because there is always at least one task running."
+								description: "PSI — fraction of time runnable tasks waited for a CPU"
 							}
-							plugin: #ratioChart
+							plugin: #sparkRatio
 							queries: [
 								{#tsQuery & {#query: #cpuPSI, #format: "{{node}}"}},
 							]
@@ -610,7 +387,6 @@ dashboardBuilder & {
 			// ═══════════════════════════════════════════════════
 			// NETWORKING
 			// ═══════════════════════════════════════════════════
-
 			{
 				#title:  "Networking"
 				#cols:   2
@@ -620,7 +396,7 @@ dashboardBuilder & {
 						spec: {
 							display: {
 								name:        "NIC Utilization"
-								description: "Transmit and receive utilization vs link speed for physical NICs. Filtered by $nic variable."
+								description: "Transmit and receive utilization vs link speed for physical NICs."
 							}
 							plugin: #ratioChart
 							queries: [
@@ -633,7 +409,7 @@ dashboardBuilder & {
 						spec: {
 							display: {
 								name:        "NIC Drops & Errors"
-								description: "Packet drops (software stack — ring buffer overflow, queue full) and errors (physical layer — CRC failures, runt frames). Normal error rate is 0."
+								description: "Packet drops (ring buffer overflow) and errors (CRC failures). Normal rate is 0."
 							}
 							plugin: #rateChart
 							queries: [
@@ -659,7 +435,7 @@ dashboardBuilder & {
 						spec: {
 							display: {
 								name:        "I/O Pressure — Waiting (some)"
-								description: "Fraction of wall-clock time at least one task was stalled waiting for block I/O. Root cgroup (node-wide)."
+								description: "Fraction of wall-clock time at least one task was stalled waiting for block I/O."
 							}
 							plugin: #ratioChart
 							queries: [
@@ -671,7 +447,7 @@ dashboardBuilder & {
 						spec: {
 							display: {
 								name:        "I/O Pressure — Stalled (full)"
-								description: "Fraction of wall-clock time ALL tasks were stalled on I/O (zero CPU progress). Much more severe than 'some'."
+								description: "Fraction of wall-clock time ALL tasks were stalled on I/O (zero CPU progress)."
 							}
 							plugin: #ratioChart
 							queries: [
@@ -683,8 +459,6 @@ dashboardBuilder & {
 			},
 
 			// ── Fibre Channel ────────────────────────────────
-			// No-op on clusters without FC storage — panels
-			// show "no data" and the HBA variable is empty.
 			{
 				#title:  "Storage — Fibre Channel"
 				#cols:   2
@@ -694,7 +468,7 @@ dashboardBuilder & {
 						spec: {
 							display: {
 								name:        "FC HBA Utilization"
-								description: "Transmit and receive utilization vs port link speed. Filtered by $hba variable."
+								description: "Transmit and receive utilization vs port link speed."
 							}
 							plugin: #ratioChart
 							queries: [
@@ -707,7 +481,7 @@ dashboardBuilder & {
 						spec: {
 							display: {
 								name:        "FC Errors & Link Loss"
-								description: "CRC/frame errors and loss-of-signal/sync events. Normal value is 0 — any sustained rate indicates a physical layer problem."
+								description: "CRC/frame errors and loss-of-signal/sync events. Normal value is 0."
 							}
 							plugin: #rateChart
 							queries: [
@@ -720,9 +494,6 @@ dashboardBuilder & {
 			},
 
 			// ── Multipath Health ─────────────────────────────
-			// Requires the dmmultipath node_exporter collector
-			// (disabled by default in OpenShift).  No-op when
-			// disabled or no multipath devices exist.
 			{
 				#title: "Storage — Multipath Health"
 				#cols:  3
@@ -736,17 +507,12 @@ dashboardBuilder & {
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "decimal"
-										decimalPlaces: 0
-									}
+									format: {unit: "decimal", decimalPlaces: 0}
 								}
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #mpathDevices
-								}
+								spec: plugin: promQuery & {spec: query: #mpathDevices}
 							}]
 						}
 					},
@@ -759,17 +525,12 @@ dashboardBuilder & {
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "decimal"
-										decimalPlaces: 0
-									}
+									format: {unit: "decimal", decimalPlaces: 0}
 								}
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #mpathTotalPaths
-								}
+								spec: plugin: promQuery & {spec: query: #mpathTotalPaths}
 							}]
 						}
 					},
@@ -782,10 +543,7 @@ dashboardBuilder & {
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"
-									format: {
-										unit:          "decimal"
-										decimalPlaces: 0
-									}
+									format: {unit: "decimal", decimalPlaces: 0}
 									thresholds: {
 										steps: [
 											{value: 0, color: "#32ac2d"},
@@ -796,9 +554,7 @@ dashboardBuilder & {
 							}
 							queries: [{
 								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #mpathFailedPaths
-								}
+								spec: plugin: promQuery & {spec: query: #mpathFailedPaths}
 							}]
 						}
 					},
