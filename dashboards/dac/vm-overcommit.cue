@@ -92,8 +92,61 @@ _z: "((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 
 	)
 	"""
 
-// ── Diagnostics ─────────────────────────────────────────────────────
-#vmCount: "count(kubevirt_vmi_memory_domain_bytes)"
+// ── Markdown panel — formula definition ─────────────────────────────
+#markdownChart: {
+	kind: "Markdown"
+	spec: text: string
+}
+
+_formulaText: """
+	## Methodology
+
+	Both approaches estimate a safe overcommit ratio from observed VM usage over the selected observation period.
+
+	**Overcommit ratio** = *G* / (*μ* + *m* × *σ*)
+
+	Where:
+	- ***G*** = total granted resources (sum of VM memory reservations or vCPU counts)
+	- ***μ*** = mean actual usage over the observation period
+	- ***σ*** = standard deviation of actual usage over the observation period
+	- ***m*** = safety multiplier (depends on the approach and confidence level *q*)
+
+	---
+
+	### Normal Approach
+
+	Assumes VM aggregate load follows a normal distribution.
+	The multiplier is the **z-score** from the standard normal inverse CDF:
+
+	**Overcommit** = *G* / (*μ* + *z*(*q*) × *σ*)
+
+	| Confidence *q* | z-score |
+	|:-:|:-:|
+	| 95% | 1.645 |
+	| 99% | 2.326 |
+	| 99.5% | 2.576 |
+	| 99.9% | 3.090 |
+	| 99.95% | 3.291 |
+	| 99.99% | 3.719 |
+
+	### Chebyshev (Cantelli) Approach
+
+	Makes **no assumption** about the distribution shape — valid for any load pattern.
+	Uses the one-sided Chebyshev (Cantelli) inequality:
+
+	**Overcommit** = *G* / (*μ* + *k* × *σ*)
+
+	Where: ***k*** = √( *q* / (1 − *q*) )
+
+	| Confidence *q* | k |
+	|:-:|:-:|
+	| 95% | 4.359 |
+	| 99% | 9.950 |
+	| 99.5% | 14.107 |
+	| 99.9% | 31.607 |
+
+	Since this makes no distributional assumptions, it is more conservative than the Normal approach. The gap between the two ratios shows how much the normality assumption is worth.
+	"""
 
 // ── Dashboard ───────────────────────────────────────────────────────
 
@@ -101,7 +154,7 @@ dashboardBuilder & {
 	#name:    "vm-overcommit"
 	#project: "perses"
 	#display: {
-		name: "VM Overcommit"
+		name: "Overcommit Recommendation"
 		description: """
 			Statistical overcommit analysis based on observed aggregate VM usage volatility.
 			Normal = assumes bell-curve distribution for VM load.
@@ -142,7 +195,24 @@ dashboardBuilder & {
 
 	#panelGroups: panelGroupsBuilder & {
 		#input: [
-			// ── Row 1: Memory overcommit ratios ─────────────
+			// ── Row 1: Formulas ─────────────────────────────
+			{
+				#title:  "Formulas"
+				#cols:   1
+				#height: 20
+				#panels: [
+					panelBuilder & {
+						spec: {
+							display: name: "Methodology"
+							plugin: #markdownChart & {
+								spec: text: _formulaText
+							}
+						}
+					},
+				]
+			},
+
+			// ── Row 2: Memory overcommit ratios ─────────────
 			{
 				#title: "Memory Overcommit Ratio"
 				#cols:  2
@@ -150,8 +220,8 @@ dashboardBuilder & {
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Normal — assumes normal distribution for VM load"
-								description: "Overcommit = Granted / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level."
+								name:        "Normal"
+								description: "Overcommit = G / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level."
 							}
 							plugin: statChart & {spec: {calculation: "last-number", format: {unit: "decimal", decimalPlaces: 2}}}
 							queries: [{#q & {#query: #memNormal, #format: "normal"}}]
@@ -160,8 +230,8 @@ dashboardBuilder & {
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Chebyshev — no assumption on load distribution, more conservative"
-								description: "Overcommit = Granted / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape."
+								name:        "Chebyshev"
+								description: "Overcommit = G / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape."
 							}
 							plugin: statChart & {spec: {calculation: "last-number", format: {unit: "decimal", decimalPlaces: 2}}}
 							queries: [{#q & {#query: #memChebyshev, #format: "chebyshev"}}]
@@ -170,7 +240,7 @@ dashboardBuilder & {
 				]
 			},
 
-			// ── Row 2: CPU overcommit ratios ────────────────
+			// ── Row 3: CPU overcommit ratios ────────────────
 			{
 				#title: "CPU Overcommit Ratio"
 				#cols:  2
@@ -178,8 +248,8 @@ dashboardBuilder & {
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Normal — assumes normal distribution for VM load"
-								description: "Overcommit = Granted / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level."
+								name:        "Normal"
+								description: "Overcommit = G / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level."
 							}
 							plugin: statChart & {spec: {calculation: "last-number", format: {unit: "decimal", decimalPlaces: 2}}}
 							queries: [{#q & {#query: #cpuNormal, #format: "normal"}}]
@@ -188,29 +258,11 @@ dashboardBuilder & {
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Chebyshev — no assumption on load distribution, more conservative"
-								description: "Overcommit = Granted / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape."
+								name:        "Chebyshev"
+								description: "Overcommit = G / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape."
 							}
 							plugin: statChart & {spec: {calculation: "last-number", format: {unit: "decimal", decimalPlaces: 2}}}
 							queries: [{#q & {#query: #cpuChebyshev, #format: "chebyshev"}}]
-						}
-					},
-				]
-			},
-
-			// ── Row 3: Diagnostics ──────────────────────────
-			{
-				#title: "Diagnostics"
-				#cols:  1
-				#panels: [
-					panelBuilder & {
-						spec: {
-							display: {
-								name:        "VM count"
-								description: "Number of running VMs contributing to the aggregate."
-							}
-							plugin: statChart & {spec: {calculation: "last-number", format: {unit: "decimal", decimalPlaces: 0}}}
-							queries: [{#q & {#query: #vmCount, #format: "VMs"}}]
 						}
 					},
 				]

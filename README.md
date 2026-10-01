@@ -369,9 +369,9 @@ These dashboards are cross-functional (memory + CPU) and do not belong to any si
 
 | Dashboard | Description |
 |-----------|-------------|
-| **How many VMs fit** (`vm-capacity`) | How many more VMs of a chosen shape fit in remaining capacity. Variables: VM memory, VM CPU, memory overcommit, CPU overcommit. Stacked bar charts show non-VM used, VM used, and available for memory and CPU. |
+| **Capacity Management** (`vm-capacity`) | How many more VMs of a chosen shape fit in remaining capacity. Variables: VM memory, VM CPU, memory overcommit, CPU overcommit. Stacked bar charts show non-VM used, VM used, and available for memory and CPU. |
 | **Time to Capacity Exhaustion** (`capacity-exhaustion`) | Days until the cluster runs out of capacity. Gauge capped at 365 with red/orange/green thresholds. Trend chart shows how the estimate has changed over time. Variable: observation period (7d–360d). |
-| **VM Overcommit** (`vm-overcommit`) | Statistical overcommit analysis: Normal (bell-curve assumption) and Chebyshev (distribution-free) approaches. Variables: observation period, confidence level. Shows suggested overcommit ratios for memory and CPU with trend charts. |
+| **Overcommit Recommendation** (`vm-overcommit`) | Statistical overcommit analysis: Normal (bell-curve assumption) and Chebyshev (distribution-free) approaches with mathematical formulas. Variables: observation period, confidence level. Shows suggested overcommit ratios for memory and CPU with trend charts. |
 
 <!-- Dashboard screenshots — add images to docs/images/ and uncomment:
 ![How many VMs fit](docs/images/vm-capacity.png)

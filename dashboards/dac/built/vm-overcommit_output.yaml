@@ -7,7 +7,7 @@ metadata:
   version: 0
 spec:
   display:
-    name: VM Overcommit
+    name: Overcommit Recommendation
     description: |-
       Statistical overcommit analysis based on observed aggregate VM usage volatility.
       Normal = assumes bell-curve distribution for VM load.
@@ -65,64 +65,64 @@ spec:
       kind: Panel
       spec:
         display:
-          name: Normal — assumes normal distribution for VM load
-          description: Overcommit = Granted / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level.
+          name: Methodology
         plugin:
-          kind: StatChart
+          kind: Markdown
           spec:
-            calculation: last-number
-            format:
-              unit: decimal
-              decimalPlaces: 2
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: |-
-                    sum(kubevirt_vmi_memory_domain_bytes)
-                    / (
-                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
-                      + ((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 0.99) * 2.326 + (vector($confidence) == bool 0.995) * 2.576 + (vector($confidence) == bool 0.999) * 3.090 + (vector($confidence) == bool 0.9995) * 3.291 + (vector($confidence) == bool 0.9999) * 3.719)
-                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
-                    )
-                  seriesNameFormat: normal
-                  minStep: 5m
-    "0_1":
-      kind: Panel
-      spec:
-        display:
-          name: Chebyshev — no assumption on load distribution, more conservative
-          description: Overcommit = Granted / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape.
-        plugin:
-          kind: StatChart
-          spec:
-            calculation: last-number
-            format:
-              unit: decimal
-              decimalPlaces: 2
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: |-
-                    sum(kubevirt_vmi_memory_domain_bytes)
-                    / (
-                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
-                      + sqrt(vector($confidence / (1 - $confidence)))
-                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
-                    )
-                  seriesNameFormat: chebyshev
-                  minStep: 5m
+            text: |-
+              ## Methodology
+
+              Both approaches estimate a safe overcommit ratio from observed VM usage over the selected observation period.
+
+              **Overcommit ratio** = *G* / (*μ* + *m* × *σ*)
+
+              Where:
+              - ***G*** = total granted resources (sum of VM memory reservations or vCPU counts)
+              - ***μ*** = mean actual usage over the observation period
+              - ***σ*** = standard deviation of actual usage over the observation period
+              - ***m*** = safety multiplier (depends on the approach and confidence level *q*)
+
+              ---
+
+              ### Normal Approach
+
+              Assumes VM aggregate load follows a normal distribution.
+              The multiplier is the **z-score** from the standard normal inverse CDF:
+
+              **Overcommit** = *G* / (*μ* + *z*(*q*) × *σ*)
+
+              | Confidence *q* | z-score |
+              |:-:|:-:|
+              | 95% | 1.645 |
+              | 99% | 2.326 |
+              | 99.5% | 2.576 |
+              | 99.9% | 3.090 |
+              | 99.95% | 3.291 |
+              | 99.99% | 3.719 |
+
+              ### Chebyshev (Cantelli) Approach
+
+              Makes **no assumption** about the distribution shape — valid for any load pattern.
+              Uses the one-sided Chebyshev (Cantelli) inequality:
+
+              **Overcommit** = *G* / (*μ* + *k* × *σ*)
+
+              Where: ***k*** = √( *q* / (1 − *q*) )
+
+              | Confidence *q* | k |
+              |:-:|:-:|
+              | 95% | 4.359 |
+              | 99% | 9.950 |
+              | 99.5% | 14.107 |
+              | 99.9% | 31.607 |
+
+              Since this makes no distributional assumptions, it is more conservative than the Normal approach. The gap between the two ratios shows how much the normality assumption is worth.
     "1_0":
       kind: Panel
       spec:
         display:
-          name: Normal — assumes normal distribution for VM load
-          description: Overcommit = Granted / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level.
+          name: Normal
+          description: Overcommit = G / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level.
         plugin:
           kind: StatChart
           spec:
@@ -137,11 +137,11 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    sum(vmi:kubevirt_vmi_vcpu:count)
+                    sum(kubevirt_vmi_memory_domain_bytes)
                     / (
-                      sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                       + ((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 0.99) * 2.326 + (vector($confidence) == bool 0.995) * 2.576 + (vector($confidence) == bool 0.999) * 3.090 + (vector($confidence) == bool 0.9995) * 3.291 + (vector($confidence) == bool 0.9999) * 3.719)
-                        * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                     )
                   seriesNameFormat: normal
                   minStep: 5m
@@ -149,8 +149,64 @@ spec:
       kind: Panel
       spec:
         display:
-          name: Chebyshev — no assumption on load distribution, more conservative
-          description: Overcommit = Granted / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape.
+          name: Chebyshev
+          description: Overcommit = G / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 2
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(kubevirt_vmi_memory_domain_bytes)
+                    / (
+                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
+                      + sqrt(vector($confidence / (1 - $confidence)))
+                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
+                    )
+                  seriesNameFormat: chebyshev
+                  minStep: 5m
+    "2_0":
+      kind: Panel
+      spec:
+        display:
+          name: Normal
+          description: Overcommit = G / (μ + z×σ). The z-score is looked up from the standard normal table for the selected confidence level.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 2
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(vmi:kubevirt_vmi_vcpu:count)
+                    / (
+                      sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
+                      + ((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 0.99) * 2.326 + (vector($confidence) == bool 0.995) * 2.576 + (vector($confidence) == bool 0.999) * 3.090 + (vector($confidence) == bool 0.9995) * 3.291 + (vector($confidence) == bool 0.9999) * 3.719)
+                        * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
+                    )
+                  seriesNameFormat: normal
+                  minStep: 5m
+    "2_1":
+      kind: Panel
+      spec:
+        display:
+          name: Chebyshev
+          description: Overcommit = G / (μ + k×σ) where k = √(q/(1−q)). The Cantelli inequality guarantees this bound for any distribution shape.
         plugin:
           kind: StatChart
           spec:
@@ -172,28 +228,6 @@ spec:
                         * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                     )
                   seriesNameFormat: chebyshev
-                  minStep: 5m
-    "2_0":
-      kind: Panel
-      spec:
-        display:
-          name: VM count
-          description: Number of running VMs contributing to the aggregate.
-        plugin:
-          kind: StatChart
-          spec:
-            calculation: last-number
-            format:
-              unit: decimal
-              decimalPlaces: 0
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: count(kubevirt_vmi_memory_domain_bytes)
-                  seriesNameFormat: VMs
                   minStep: 5m
     "3_0":
       kind: Panel
@@ -295,24 +329,18 @@ spec:
     - kind: Grid
       spec:
         display:
-          title: Memory Overcommit Ratio
+          title: Formulas
         items:
           - x: 0
             "y": 0
-            width: 12
-            height: 8
+            width: 24
+            height: 20
             content:
               $ref: '#/spec/panels/0_0'
-          - x: 12
-            "y": 0
-            width: 12
-            height: 8
-            content:
-              $ref: '#/spec/panels/0_1'
     - kind: Grid
       spec:
         display:
-          title: CPU Overcommit Ratio
+          title: Memory Overcommit Ratio
         items:
           - x: 0
             "y": 0
@@ -329,14 +357,20 @@ spec:
     - kind: Grid
       spec:
         display:
-          title: Diagnostics
+          title: CPU Overcommit Ratio
         items:
           - x: 0
             "y": 0
-            width: 24
+            width: 12
             height: 8
             content:
               $ref: '#/spec/panels/2_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_1'
     - kind: Grid
       spec:
         display:

@@ -172,29 +172,6 @@ dashboardBuilder & {
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Reserved"
-								description: "system-reserved + kube-reserved + eviction-threshold"
-							}
-							plugin: statChart & {
-								spec: {
-									calculation: "last-number"
-									format: {
-										unit:          "bytes"
-										decimalPlaces: 1
-									}
-								}
-							}
-							queries: [{
-								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {
-									spec: query: #reserved
-								}
-							}]
-						}
-					},
-					panelBuilder & {
-						spec: {
-							display: {
 								name:        "Workload utilization"
 								description: "kubepods.slice working_set / allocatable (kubelet eviction metric)"
 							}
@@ -211,6 +188,29 @@ dashboardBuilder & {
 								kind: "TimeSeriesQuery"
 								spec: plugin: promQuery & {
 									spec: query: #workloadUtilization
+								}
+							}]
+						}
+					},
+					panelBuilder & {
+						spec: {
+							display: {
+								name:        "Reserved"
+								description: "system-reserved + kube-reserved + eviction-threshold"
+							}
+							plugin: statChart & {
+								spec: {
+									calculation: "last-number"
+									format: {
+										unit:          "bytes"
+										decimalPlaces: 1
+									}
+								}
+							}
+							queries: [{
+								kind: "TimeSeriesQuery"
+								spec: plugin: promQuery & {
+									spec: query: #reserved
 								}
 							}]
 						}

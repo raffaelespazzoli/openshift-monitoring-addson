@@ -69,6 +69,26 @@ spec:
       kind: Panel
       spec:
         display:
+          name: Workload utilization
+          description: kubepods.slice working_set / allocatable (kubelet eviction metric)
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: percent
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_utilization:ratio{node=~"$node"})
+    "0_3":
+      kind: Panel
+      spec:
+        display:
           name: Reserved
           description: system-reserved + kube-reserved + eviction-threshold
         plugin:
@@ -87,26 +107,6 @@ spec:
                   query: |-
                     sum(kube_node_status_capacity{resource="memory", node=~"$node"})
                     - sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
-    "0_3":
-      kind: Panel
-      spec:
-        display:
-          name: Workload utilization
-          description: kubepods.slice working_set / allocatable (kubelet eviction metric)
-        plugin:
-          kind: StatChart
-          spec:
-            calculation: last-number
-            format:
-              unit: percent
-              decimalPlaces: 1
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:workloads_utilization:ratio{node=~"$node"})
     "0_4":
       kind: Panel
       spec:
