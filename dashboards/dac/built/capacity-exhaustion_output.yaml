@@ -15,9 +15,7 @@ spec:
         display:
           name: Observation period
           hidden: false
-        defaultValue:
-          singleValue: 30d
-          sliceValues: []
+        defaultValue: 30d
         name: observation_period
         allowAllValue: false
         allowMultiple: false

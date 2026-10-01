@@ -85,7 +85,26 @@ Dashboards are CUE source → `percli dac build` → kustomize wraps.
 - Built outputs land in `dashboards/dac/built/*_output.yaml`.
 - `dashboards/kustomization.yaml` wraps them as `PersesDashboard` CRs by default.
 - `dashboards/wrap-configmap.yaml` is the alternative for unmanaged Perses.
-- After editing a `.cue` file, run `percli dac build -f <file>.cue` in `dashboards/dac/` and commit the rebuilt output.
+- After editing a `.cue` file, run `percli dac build -f <file>.cue` in `dashboards/dac/` and then fix the `defaultValue` format before committing (see below).
+
+### Post-build: fix `defaultValue` format
+
+`percli dac build` emits `defaultValue` as a multi-line object that Perses cannot unmarshal:
+
+```yaml
+defaultValue:
+  singleValue: "30d"
+  sliceValues: []
+```
+
+After building, collapse these to plain strings so both kustomize consumers and direct-file consumers (e.g. ConfigMap provisioning) get valid dashboards:
+
+```sh
+cd dashboards/dac/built
+sed -i -E '/defaultValue:$/{N;N;s/defaultValue:\n[[:space:]]+singleValue: (.*)\n[[:space:]]+sliceValues: \[\]/defaultValue: \1/}' *_output.yaml
+```
+
+The `dashboards/kustomization.yaml` JSON patches also fix this for the kustomize pipeline, but fixing the built files at source ensures all consumers work correctly.
 
 ## When Adding New Rules
 

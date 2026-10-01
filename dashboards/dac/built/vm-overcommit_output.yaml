@@ -19,9 +19,7 @@ spec:
         display:
           name: Observation period
           hidden: false
-        defaultValue:
-          singleValue: 30d
-          sliceValues: []
+        defaultValue: 30d
         name: observation_period
         allowAllValue: false
         allowMultiple: false
@@ -42,9 +40,7 @@ spec:
         display:
           name: Confidence level
           hidden: false
-        defaultValue:
-          singleValue: "0.999"
-          sliceValues: []
+        defaultValue: "0.999"
         name: confidence
         allowAllValue: false
         allowMultiple: false

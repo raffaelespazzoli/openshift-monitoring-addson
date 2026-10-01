@@ -405,6 +405,10 @@ percli dac build -f vm-overcommit.cue
 percli dac build -f node-memory.cue
 percli dac build -f pod-memory.cue
 percli dac build -f vm-memory.cue
+
+# Fix defaultValue format (percli emits an object; Perses expects a string)
+cd built
+sed -i -E '/defaultValue:$/{N;N;s/defaultValue:\n[[:space:]]+singleValue: (.*)\n[[:space:]]+sliceValues: \[\]/defaultValue: \1/}' *_output.yaml
 ```
 
 Requires `cue` >= 0.16.1 and `percli` >= 0.54.0.
