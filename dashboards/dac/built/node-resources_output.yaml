@@ -41,7 +41,7 @@ spec:
               kind: PrometheusDatasource
             labelName: device
             matchers:
-              - node_nic:network:transmit_utilization:ratio{node=~"$node"}
+              - node_nic:network:transmit_utilization:ratio{instance=~"$node"}
     - kind: ListVariable
       spec:
         display:
@@ -57,7 +57,7 @@ spec:
               kind: PrometheusDatasource
             labelName: fc_host
             matchers:
-              - node_hba:fc:transmit_utilization:ratio{node=~"$node"}
+              - node_hba:fc:transmit_utilization:ratio{instance=~"$node"}
   panels:
     "0_0":
       kind: Panel
@@ -493,14 +493,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:transmit_utilization:ratio{node=~"$node", device=~"$nic"}
+                  query: node_nic:network:transmit_utilization:ratio{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: TX {{device}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:receive_utilization:ratio{node=~"$node", device=~"$nic"}
+                  query: node_nic:network:receive_utilization:ratio{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: RX {{device}}
     "5_1":
       kind: Panel
@@ -527,14 +527,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:drop_rate:packets_per_second{node=~"$node", device=~"$nic"}
+                  query: node_nic:network:drop_rate:packets_per_second{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: Drops {{device}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:error_rate:packets_per_second{node=~"$node", device=~"$nic"}
+                  query: node_nic:network:error_rate:packets_per_second{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: Errors {{device}}
     "6_0":
       kind: Panel
@@ -615,14 +615,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:transmit_utilization:ratio{node=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:transmit_utilization:ratio{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: TX {{fc_host}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:receive_utilization:ratio{node=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:receive_utilization:ratio{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: RX {{fc_host}}
     "7_1":
       kind: Panel
@@ -649,14 +649,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:error_rate:frames_per_second{node=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:error_rate:frames_per_second{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: Errors {{fc_host}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:link_loss_rate:per_second{node=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:link_loss_rate:per_second{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: Link loss {{fc_host}}
     "8_0":
       kind: Panel
@@ -677,7 +677,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: count(node_dmmultipath_device_active{node=~"$node"})
+                  query: count(node_dmmultipath_device_active{instance=~"$node"})
     "8_1":
       kind: Panel
       spec:
@@ -697,7 +697,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(node_dmmultipath_device_paths{node=~"$node"})
+                  query: sum(node_dmmultipath_device_paths{instance=~"$node"})
     "8_2":
       kind: Panel
       spec:
@@ -723,7 +723,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(node_dmmultipath_device_paths_failed{node=~"$node"})
+                  query: sum(node_dmmultipath_device_paths_failed{instance=~"$node"})
   layouts:
     - kind: Grid
       spec:

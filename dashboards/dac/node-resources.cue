@@ -153,9 +153,11 @@ _sy: "{node=~\"$node\"}"
 // NETWORKING — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-// The node label on node_nic recording rules is preserved via
-// on(instance, device, node) matching (see networking/recording-rules.yaml).
-_netFilter: "{node=~\"$node\", device=~\"$nic\"}"
+// node_exporter metrics carry {instance} (= node hostname) but NOT
+// {node}.  cAdvisor metrics carry {node} but instance is IP:port.
+// The $node variable matches both: kube-state node names equal the
+// node_exporter instance hostnames in OpenShift.
+_netFilter: "{instance=~\"$node\", device=~\"$nic\"}"
 #netTxUtil:  "node_nic:network:transmit_utilization:ratio" + _netFilter
 #netRxUtil:  "node_nic:network:receive_utilization:ratio" + _netFilter
 #netDrops:   "node_nic:network:drop_rate:packets_per_second" + _netFilter
@@ -169,18 +171,18 @@ _netFilter: "{node=~\"$node\", device=~\"$nic\"}"
 #ioPSIWaiting: "node:io:pressure_waiting:ratio{node=~\"$node\"}"
 #ioPSIStalled: "node:io:pressure_stalled:ratio{node=~\"$node\"}"
 
-// FC HBA recording rules already carry {node} via group_left.
-_fcFilter: "{node=~\"$node\", fc_host=~\"$hba\"}"
+// FC HBA recording rules use node_exporter — match via {instance}.
+_fcFilter: "{instance=~\"$node\", fc_host=~\"$hba\"}"
 #fcTxUtil:   "node_hba:fc:transmit_utilization:ratio" + _fcFilter
 #fcRxUtil:   "node_hba:fc:receive_utilization:ratio" + _fcFilter
 #fcErrors:   "node_hba:fc:error_rate:frames_per_second" + _fcFilter
 #fcLinkLoss: "node_hba:fc:link_loss_rate:per_second" + _fcFilter
 
-// DM-multipath raw metrics — {node} from ServiceMonitor relabeling.
+// DM-multipath raw node_exporter metrics — match via {instance}.
 // No-op on clusters without the dmmultipath collector enabled.
-#mpathDevices:     "count(node_dmmultipath_device_active{node=~\"$node\"})"
-#mpathTotalPaths:  "sum(node_dmmultipath_device_paths{node=~\"$node\"})"
-#mpathFailedPaths: "sum(node_dmmultipath_device_paths_failed{node=~\"$node\"})"
+#mpathDevices:     "count(node_dmmultipath_device_active{instance=~\"$node\"})"
+#mpathTotalPaths:  "sum(node_dmmultipath_device_paths{instance=~\"$node\"})"
+#mpathFailedPaths: "sum(node_dmmultipath_device_paths_failed{instance=~\"$node\"})"
 
 // ══════════════════════════════════════════════════════════════════════
 // Dashboard
@@ -213,7 +215,7 @@ dashboardBuilder & {
 				#name:   "nic"
 				#display: name: "NIC"
 				#label:  "device"
-				#query:  "node_nic:network:transmit_utilization:ratio{node=~\"$node\"}"
+				#query:  "node_nic:network:transmit_utilization:ratio{instance=~\"$node\"}"
 				#allowAllValue: true
 				#allowMultiple: false
 			},
@@ -221,7 +223,7 @@ dashboardBuilder & {
 				#name:   "hba"
 				#display: name: "HBA"
 				#label:  "fc_host"
-				#query:  "node_hba:fc:transmit_utilization:ratio{node=~\"$node\"}"
+				#query:  "node_hba:fc:transmit_utilization:ratio{instance=~\"$node\"}"
 				#allowAllValue: true
 				#allowMultiple: false
 			},
