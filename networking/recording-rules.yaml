@@ -51,16 +51,22 @@ spec:
         # Transmit utilization: rate(tx_bytes) / speed_bytes.
         # Bounded 0–1 for a single NIC; can briefly exceed 1.0 due
         # to TSO/GSO offload counting.
+        #
+        # The on() clause includes `node` so the recording rule
+        # output carries the node label from OpenShift's
+        # ServiceMonitor relabeling.  On clusters without a `node`
+        # label on node_exporter metrics, both sides have implicit
+        # node="" so matching still works (backward-compatible).
         - record: node_nic:network:transmit_utilization:ratio
           expr: |
             (
               rate(node_network_transmit_bytes_total[5m])
-            / on (instance, device)
+            / on (instance, device, node)
               (node_network_speed_bytes > 0)
             )
-            * on (instance, device) group_left()
+            * on (instance, device, node) group_left()
               (node_network_carrier == 1)
-            * on (instance, device) group_left(duplex)
+            * on (instance, device, node) group_left(duplex)
               node_network_info{duplex!=""}
 
         # Receive utilization: rate(rx_bytes) / speed_bytes.
@@ -68,12 +74,12 @@ spec:
           expr: |
             (
               rate(node_network_receive_bytes_total[5m])
-            / on (instance, device)
+            / on (instance, device, node)
               (node_network_speed_bytes > 0)
             )
-            * on (instance, device) group_left()
+            * on (instance, device, node) group_left()
               (node_network_carrier == 1)
-            * on (instance, device) group_left(duplex)
+            * on (instance, device, node) group_left(duplex)
               node_network_info{duplex!=""}
 
         # ── Node scope: packet drop rate ─────────────────────────

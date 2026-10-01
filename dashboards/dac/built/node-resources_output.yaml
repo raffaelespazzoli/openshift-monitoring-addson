@@ -1,0 +1,905 @@
+kind: Dashboard
+metadata:
+  name: node-resources
+  createdAt: "0001-01-01T00:00:00Z"
+  project: perses
+  updatedAt: "0001-01-01T00:00:00Z"
+  version: 0
+spec:
+  display:
+    name: Node Resources
+    description: 'Per-node resource overview: memory decomposition & PSI, CPU utilization & PSI, NIC saturation, I/O pressure, Fibre Channel, and multipath health.'
+  variables:
+    - kind: ListVariable
+      spec:
+        display:
+          name: Node
+          hidden: false
+        name: node
+        allowAllValue: true
+        allowMultiple: false
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+            labelName: node
+            matchers:
+              - kube_node_status_capacity{}
+    - kind: ListVariable
+      spec:
+        display:
+          name: NIC
+          hidden: false
+        name: nic
+        allowAllValue: true
+        allowMultiple: false
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+            labelName: device
+            matchers:
+              - node_nic:network:transmit_utilization:ratio{node=~"$node"}
+    - kind: ListVariable
+      spec:
+        display:
+          name: HBA
+          hidden: false
+        name: hba
+        allowAllValue: true
+        allowMultiple: false
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+            labelName: fc_host
+            matchers:
+              - node_hba:fc:transmit_utilization:ratio{node=~"$node"}
+  panels:
+    "0_0":
+      kind: Panel
+      spec:
+        display:
+          name: Capacity
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: bytes
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(kube_node_status_capacity{resource="memory", node=~"$node"})
+    "0_1":
+      kind: Panel
+      spec:
+        display:
+          name: Allocatable
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: bytes
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+    "0_2":
+      kind: Panel
+      spec:
+        display:
+          name: Workload utilization
+          description: kubepods.slice working_set / allocatable (kubelet eviction metric)
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: percent
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_utilization:ratio{node=~"$node"})
+    "0_3":
+      kind: Panel
+      spec:
+        display:
+          name: Reserved
+          description: system-reserved + kube-reserved + eviction-threshold
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: bytes
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
+                    - sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+    "0_4":
+      kind: Panel
+      spec:
+        display:
+          name: System used
+          description: system.slice total usage (can exceed reserved via file cache)
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: bytes
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:system_used:bytes{node=~"$node"})
+    "1_0":
+      kind: Panel
+      spec:
+        display:
+          name: Memory Pressure
+          description: Fraction of wall-clock time at least one process was stalled waiting for memory reclaim. Root cgroup (node-wide). Requires cgroup v2.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:pressure:ratio{node=~"$node"}
+                  seriesNameFormat: '{{node}}'
+    "2_0":
+      kind: Panel
+      spec:
+        display:
+          name: Node Total
+          description: 'Full node memory: system + workloads. Total height = node capacity.'
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.7
+              lineWidth: 2
+              stack: all
+            querySettings:
+              - queryIndex: 5
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                stack: false
+                areaOpacity: 0
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_non_reclaimable:bytes{node=~"$node"}) + sum(node:memory:system_non_reclaimable:bytes{node=~"$node"})
+                  seriesNameFormat: Non-reclaimable (anon)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_overhead:bytes{node=~"$node"}) + sum(node:memory:system_overhead:bytes{node=~"$node"})
+                  seriesNameFormat: Kernel overhead
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_hot_reclaimable:bytes{node=~"$node"}) + sum(node:memory:system_hot_reclaimable:bytes{node=~"$node"})
+                  seriesNameFormat: Reclaimable hot (active file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_cold:bytes{node=~"$node"}) + sum(node:memory:system_cold:bytes{node=~"$node"})
+                  seriesNameFormat: Reclaimable cold (inactive file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
+                    - sum(node:memory:workloads_used:bytes{node=~"$node"})
+                    - sum(node:memory:system_used:bytes{node=~"$node"})
+                  seriesNameFormat: Free
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                  seriesNameFormat: ── Allocatable
+    "2_1":
+      kind: Panel
+      spec:
+        display:
+          name: Workloads (kubepods.slice)
+          description: Pod memory only. Total height = node allocatable.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.7
+              stack: all
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_non_reclaimable:bytes{node=~"$node"})
+                  seriesNameFormat: Non-reclaimable (anon)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_overhead:bytes{node=~"$node"})
+                  seriesNameFormat: Kernel overhead
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_hot_reclaimable:bytes{node=~"$node"})
+                  seriesNameFormat: Reclaimable hot (active file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:workloads_cold:bytes{node=~"$node"})
+                  seriesNameFormat: Reclaimable cold (inactive file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                    - sum(node:memory:workloads_used:bytes{node=~"$node"})
+                  seriesNameFormat: Free
+    "2_2":
+      kind: Panel
+      spec:
+        display:
+          name: System (system.slice)
+          description: OS and Kubernetes system services. Compare with Reserved stat above — system usage commonly exceeds reservation due to file cache.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.7
+              lineWidth: 2
+              stack: all
+            querySettings:
+              - queryIndex: 4
+                colorMode: fixed-single
+                colorValue: '#FF8C00'
+                lineStyle: dotted
+                stack: false
+                areaOpacity: 0
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:system_non_reclaimable:bytes{node=~"$node"})
+                  seriesNameFormat: Non-reclaimable (anon)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:system_overhead:bytes{node=~"$node"})
+                  seriesNameFormat: Kernel overhead
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:system_hot_reclaimable:bytes{node=~"$node"})
+                  seriesNameFormat: Reclaimable hot (active file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node:memory:system_cold:bytes{node=~"$node"})
+                  seriesNameFormat: Reclaimable cold (inactive file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
+                    - sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                  seriesNameFormat: ── Reserved
+    "3_0":
+      kind: Panel
+      spec:
+        display:
+          name: Capacity
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
+    "3_1":
+      kind: Panel
+      spec:
+        display:
+          name: Allocatable
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+    "3_2":
+      kind: Panel
+      spec:
+        display:
+          name: Workload utilization
+          description: kubepods.slice CPU usage / allocatable
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: percent
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", node=~"$node"}[5m]))
+                    / sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+    "4_0":
+      kind: Panel
+      spec:
+        display:
+          name: CPU Pressure
+          description: Fraction of wall-clock time at least one runnable task was waiting for CPU. Root cgroup (node-wide). CPU PSI only has a "some" flavor — there is no "full" because there is always at least one task running.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:cpu:pressure:ratio{node=~"$node"}
+                  seriesNameFormat: '{{node}}'
+    "5_0":
+      kind: Panel
+      spec:
+        display:
+          name: NIC Utilization
+          description: Transmit and receive utilization vs link speed for physical NICs. Filtered by $nic variable.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_nic:network:transmit_utilization:ratio{node=~"$node", device=~"$nic"}
+                  seriesNameFormat: TX {{device}}
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_nic:network:receive_utilization:ratio{node=~"$node", device=~"$nic"}
+                  seriesNameFormat: RX {{device}}
+    "5_1":
+      kind: Panel
+      spec:
+        display:
+          name: NIC Drops & Errors
+          description: Packet drops (software stack — ring buffer overflow, queue full) and errors (physical layer — CRC failures, runt frames). Normal error rate is 0.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: decimal
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_nic:network:drop_rate:packets_per_second{node=~"$node", device=~"$nic"}
+                  seriesNameFormat: Drops {{device}}
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_nic:network:error_rate:packets_per_second{node=~"$node", device=~"$nic"}
+                  seriesNameFormat: Errors {{device}}
+    "6_0":
+      kind: Panel
+      spec:
+        display:
+          name: I/O Pressure — Waiting (some)
+          description: Fraction of wall-clock time at least one task was stalled waiting for block I/O. Root cgroup (node-wide).
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:io:pressure_waiting:ratio{node=~"$node"}
+                  seriesNameFormat: '{{node}}'
+    "6_1":
+      kind: Panel
+      spec:
+        display:
+          name: I/O Pressure — Stalled (full)
+          description: Fraction of wall-clock time ALL tasks were stalled on I/O (zero CPU progress). Much more severe than 'some'.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:io:pressure_stalled:ratio{node=~"$node"}
+                  seriesNameFormat: '{{node}}'
+    "7_0":
+      kind: Panel
+      spec:
+        display:
+          name: FC HBA Utilization
+          description: Transmit and receive utilization vs port link speed. Filtered by $hba variable.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_hba:fc:transmit_utilization:ratio{node=~"$node", fc_host=~"$hba"}
+                  seriesNameFormat: TX {{fc_host}}
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_hba:fc:receive_utilization:ratio{node=~"$node", fc_host=~"$hba"}
+                  seriesNameFormat: RX {{fc_host}}
+    "7_1":
+      kind: Panel
+      spec:
+        display:
+          name: FC Errors & Link Loss
+          description: CRC/frame errors and loss-of-signal/sync events. Normal value is 0 — any sustained rate indicates a physical layer problem.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: decimal
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_hba:fc:error_rate:frames_per_second{node=~"$node", fc_host=~"$hba"}
+                  seriesNameFormat: Errors {{fc_host}}
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node_hba:fc:link_loss_rate:per_second{node=~"$node", fc_host=~"$hba"}
+                  seriesNameFormat: Link loss {{fc_host}}
+    "8_0":
+      kind: Panel
+      spec:
+        display:
+          name: Devices
+          description: Number of DM-multipath devices on the node.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 0
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: count(node_dmmultipath_device_active{node=~"$node"})
+    "8_1":
+      kind: Panel
+      spec:
+        display:
+          name: Total Paths
+          description: Sum of all I/O paths across all multipath devices.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 0
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node_dmmultipath_device_paths{node=~"$node"})
+    "8_2":
+      kind: Panel
+      spec:
+        display:
+          name: Failed Paths
+          description: Paths in a non-active state. Any value > 0 means degraded redundancy.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 0
+            thresholds:
+              steps:
+                - value: 0
+                  color: '#32ac2d'
+                - value: 1
+                  color: '#f53636'
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(node_dmmultipath_device_paths_failed{node=~"$node"})
+  layouts:
+    - kind: Grid
+      spec:
+        display:
+          title: Memory Summary
+        items:
+          - x: 0
+            "y": 0
+            width: 4
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_0'
+          - x: 4
+            "y": 0
+            width: 4
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_1'
+          - x: 8
+            "y": 0
+            width: 4
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_2'
+          - x: 12
+            "y": 0
+            width: 4
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_3'
+          - x: 16
+            "y": 0
+            width: 4
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_4'
+    - kind: Grid
+      spec:
+        display:
+          title: Memory Saturation (PSI)
+        items:
+          - x: 0
+            "y": 0
+            width: 24
+            height: 10
+            content:
+              $ref: '#/spec/panels/1_0'
+    - kind: Grid
+      spec:
+        display:
+          title: Memory Decomposition
+        items:
+          - x: 0
+            "y": 0
+            width: 8
+            height: 14
+            content:
+              $ref: '#/spec/panels/2_0'
+          - x: 8
+            "y": 0
+            width: 8
+            height: 14
+            content:
+              $ref: '#/spec/panels/2_1'
+          - x: 16
+            "y": 0
+            width: 8
+            height: 14
+            content:
+              $ref: '#/spec/panels/2_2'
+    - kind: Grid
+      spec:
+        display:
+          title: CPU Summary
+        items:
+          - x: 0
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/3_0'
+          - x: 8
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/3_1'
+          - x: 16
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/3_2'
+    - kind: Grid
+      spec:
+        display:
+          title: CPU Saturation (PSI)
+        items:
+          - x: 0
+            "y": 0
+            width: 24
+            height: 10
+            content:
+              $ref: '#/spec/panels/4_0'
+    - kind: Grid
+      spec:
+        display:
+          title: Networking
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/5_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/5_1'
+    - kind: Grid
+      spec:
+        display:
+          title: Storage — I/O Pressure
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/6_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/6_1'
+    - kind: Grid
+      spec:
+        display:
+          title: Storage — Fibre Channel
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/7_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/7_1'
+    - kind: Grid
+      spec:
+        display:
+          title: Storage — Multipath Health
+        items:
+          - x: 0
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/8_0'
+          - x: 8
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/8_1'
+          - x: 16
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/8_2'
+  duration: 6h
