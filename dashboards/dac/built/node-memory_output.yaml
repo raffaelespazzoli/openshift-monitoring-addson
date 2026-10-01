@@ -106,7 +106,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_utilization:ratio{node=~"$node"})
+                  query: sum(node:memory:workloads_utilization:ratio{node=~"$node"})
     "0_4":
       kind: Panel
       spec:
@@ -126,7 +126,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:system_used:bytes{node=~"$node"})
+                  query: sum(node:memory:system_used:bytes{node=~"$node"})
     "1_0":
       kind: Panel
       spec:
@@ -160,28 +160,28 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_non_reclaimable:bytes{node=~"$node"}) + sum(cluster:node:memory:system_non_reclaimable:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_non_reclaimable:bytes{node=~"$node"}) + sum(node:memory:system_non_reclaimable:bytes{node=~"$node"})
                   seriesNameFormat: Non-reclaimable (anon)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_overhead:bytes{node=~"$node"}) + sum(cluster:node:memory:system_overhead:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_overhead:bytes{node=~"$node"}) + sum(node:memory:system_overhead:bytes{node=~"$node"})
                   seriesNameFormat: Kernel overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_hot_reclaimable:bytes{node=~"$node"}) + sum(cluster:node:memory:system_hot_reclaimable:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_hot_reclaimable:bytes{node=~"$node"}) + sum(node:memory:system_hot_reclaimable:bytes{node=~"$node"})
                   seriesNameFormat: Reclaimable hot (active file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_cold:bytes{node=~"$node"}) + sum(cluster:node:memory:system_cold:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_cold:bytes{node=~"$node"}) + sum(node:memory:system_cold:bytes{node=~"$node"})
                   seriesNameFormat: Reclaimable cold (inactive file)
           - kind: TimeSeriesQuery
             spec:
@@ -190,8 +190,8 @@ spec:
                 spec:
                   query: |-
                     sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-                    - sum(cluster:node:memory:workloads_used:bytes{node=~"$node"})
-                    - sum(cluster:node:memory:system_used:bytes{node=~"$node"})
+                    - sum(node:memory:workloads_used:bytes{node=~"$node"})
+                    - sum(node:memory:system_used:bytes{node=~"$node"})
                   seriesNameFormat: Free
           - kind: TimeSeriesQuery
             spec:
@@ -225,28 +225,28 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_non_reclaimable:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_non_reclaimable:bytes{node=~"$node"})
                   seriesNameFormat: Non-reclaimable (anon)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_overhead:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_overhead:bytes{node=~"$node"})
                   seriesNameFormat: Kernel overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_hot_reclaimable:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_hot_reclaimable:bytes{node=~"$node"})
                   seriesNameFormat: Reclaimable hot (active file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:workloads_cold:bytes{node=~"$node"})
+                  query: sum(node:memory:workloads_cold:bytes{node=~"$node"})
                   seriesNameFormat: Reclaimable cold (inactive file)
           - kind: TimeSeriesQuery
             spec:
@@ -255,7 +255,7 @@ spec:
                 spec:
                   query: |-
                     sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
-                    - sum(cluster:node:memory:workloads_used:bytes{node=~"$node"})
+                    - sum(node:memory:workloads_used:bytes{node=~"$node"})
                   seriesNameFormat: Free
     "1_2":
       kind: Panel
@@ -290,28 +290,28 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:system_non_reclaimable:bytes{node=~"$node"})
+                  query: sum(node:memory:system_non_reclaimable:bytes{node=~"$node"})
                   seriesNameFormat: Non-reclaimable (anon)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:system_overhead:bytes{node=~"$node"})
+                  query: sum(node:memory:system_overhead:bytes{node=~"$node"})
                   seriesNameFormat: Kernel overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:system_hot_reclaimable:bytes{node=~"$node"})
+                  query: sum(node:memory:system_hot_reclaimable:bytes{node=~"$node"})
                   seriesNameFormat: Reclaimable hot (active file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(cluster:node:memory:system_cold:bytes{node=~"$node"})
+                  query: sum(node:memory:system_cold:bytes{node=~"$node"})
                   seriesNameFormat: Reclaimable cold (inactive file)
           - kind: TimeSeriesQuery
             spec:

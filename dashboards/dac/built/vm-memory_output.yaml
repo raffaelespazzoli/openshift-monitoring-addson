@@ -162,7 +162,7 @@ spec:
                 spec:
                   query: |-
                     scalar(kubevirt_vmi_launcher_memory_overhead_bytes{name=~"$vm", namespace=~"$namespace"})
-                    - scalar(vmi:virt_launcher_overhead_memory:bytes{name=~"$vm", namespace=~"$namespace"})
+                    - scalar(vmi:capacity:launcher_overhead_memory:bytes{name=~"$vm", namespace=~"$namespace"})
     "1_0":
       kind: Panel
       spec:
@@ -268,7 +268,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:virt_launcher_overhead_memory:bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: vmi:capacity:launcher_overhead_memory:bytes{name=~"$vm", namespace=~"$namespace"}
                   seriesNameFormat: Actual overhead
   layouts:
     - kind: Grid

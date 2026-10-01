@@ -87,18 +87,18 @@ _f: "name=~\"$vm\", namespace=~\"$namespace\""
 // Panel 2: Launcher overhead — estimated vs actual
 //
 // Estimated = kubevirt_vmi_launcher_memory_overhead_bytes (virt-controller prediction)
-// Actual    = vmi:virt_launcher_overhead_memory:bytes     (recording rule:
+// Actual    = vmi:capacity:launcher_overhead_memory:bytes     (recording rule:
 //             sum(working_set of all containers) − sum(resident_bytes))
 //
 // When actual exceeds estimated the pod's memory request may be too tight.
 
 #overheadEstimated: "kubevirt_vmi_launcher_memory_overhead_bytes{" + _f + "}"
-#overheadActual:    "vmi:virt_launcher_overhead_memory:bytes{" + _f + "}"
+#overheadActual:    "vmi:capacity:launcher_overhead_memory:bytes{" + _f + "}"
 
 // Overhead delta: estimated − actual.  Positive = headroom, negative = under-estimated.
 #overheadDelta: """
 	scalar(kubevirt_vmi_launcher_memory_overhead_bytes{\( _f )})
-	- scalar(vmi:virt_launcher_overhead_memory:bytes{\( _f )})
+	- scalar(vmi:capacity:launcher_overhead_memory:bytes{\( _f )})
 	"""
 
 // Summary stats

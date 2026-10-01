@@ -22,7 +22,7 @@ spec:
         # firmware (UEFI), and migration buffers.  It adds this to
         # the VM's domain memory to set the pod's memory request.
         #
-        # The actual overhead (vmi:virt_launcher_overhead_memory:bytes)
+        # The actual overhead (vmi:capacity:launcher_overhead_memory:bytes)
         # is the difference between the pod's working_set and the
         # QEMU process RSS (guest-backed pages).  When actual
         # persistently exceeds estimated, the pod is relying on
@@ -35,7 +35,7 @@ spec:
         # overhead model.
         - alert: VirtLauncherOverheadExceedsEstimate
           expr: |
-            vmi:virt_launcher_overhead_memory:bytes
+            vmi:capacity:launcher_overhead_memory:bytes
             > on(namespace, name) group_left()
             sum by (namespace, name) (kubevirt_vmi_launcher_memory_overhead_bytes)
           for: 15m

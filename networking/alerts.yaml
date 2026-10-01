@@ -33,9 +33,9 @@ spec:
         - alert: NodeNICSaturationWarning
           expr: |
             (
-              cluster:node:nic:transmit_utilization:ratio > 0.70
+              node_nic:network:transmit_utilization:ratio > 0.70
             or
-              cluster:node:nic:receive_utilization:ratio > 0.70
+              node_nic:network:receive_utilization:ratio > 0.70
             )
           for: 5m
           labels:
@@ -56,9 +56,9 @@ spec:
         - alert: NodeNICSaturationCritical
           expr: |
             (
-              cluster:node:nic:transmit_utilization:ratio > 0.85
+              node_nic:network:transmit_utilization:ratio > 0.85
             or
-              cluster:node:nic:receive_utilization:ratio > 0.85
+              node_nic:network:receive_utilization:ratio > 0.85
             )
           for: 5m
           labels:

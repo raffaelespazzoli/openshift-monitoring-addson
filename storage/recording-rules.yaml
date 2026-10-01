@@ -28,14 +28,14 @@ spec:
         # ── Node scope ───────────────────────────────────────────
 
         # Node-wide I/O pressure — "some" (at least one task waiting).
-        - record: cluster:node:io:pressure_waiting:ratio
+        - record: node:io:pressure_waiting:ratio
           expr: |
             rate(
               container_pressure_io_waiting_seconds_total{id="/"}[5m]
             )
 
         # Node-wide I/O pressure — "full" (ALL tasks waiting).
-        - record: cluster:node:io:pressure_stalled:ratio
+        - record: node:io:pressure_stalled:ratio
           expr: |
             rate(
               container_pressure_io_stalled_seconds_total{id="/"}[5m]
@@ -79,14 +79,14 @@ spec:
         # Computed as time spent in reads / number of read ops.
         # The > 0 guard on the denominator avoids division by zero
         # when a drive has no read activity.
-        - record: vmi:storage:read_latency:seconds
+        - record: vmi:io:read_latency:seconds
           expr: |
             rate(kubevirt_vmi_storage_read_times_seconds_total[5m])
             /
             (rate(kubevirt_vmi_storage_iops_read_total[5m]) > 0)
 
         # Storage write latency (seconds per operation, per drive).
-        - record: vmi:storage:write_latency:seconds
+        - record: vmi:io:write_latency:seconds
           expr: |
             rate(kubevirt_vmi_storage_write_times_seconds_total[5m])
             /
@@ -95,7 +95,7 @@ spec:
         # Total storage throughput per VM (bytes/s, read + write).
         # Summed across drives — useful for dashboarding aggregate
         # I/O load per VM.
-        - record: vmi:storage:throughput:bytes_per_second
+        - record: vmi:io:throughput:bytes_per_second
           expr: |
             sum by (namespace, name, node) (
               rate(kubevirt_vmi_storage_read_traffic_bytes_total[5m])
@@ -119,7 +119,7 @@ spec:
         #
         # Converts the string speed label to bytes/sec using the
         # standard FC rate table.
-        - record: cluster:node:fc:port_speed:bytes_per_second
+        - record: node_hba:fc:port_speed:bytes_per_second
           expr: |
             (node_fibrechannel_info{speed="128 Gbit",port_state="Online"} * 0 + 16000000000)
             or (node_fibrechannel_info{speed="64 Gbit",port_state="Online"} * 0 + 8000000000)
@@ -133,21 +133,21 @@ spec:
         # ── FC utilization vs link speed ─────────────────────────
 
         # Transmit utilization: rate(tx_words * 4) / speed_bytes.
-        - record: cluster:node:fc:transmit_utilization:ratio
+        - record: node_hba:fc:transmit_utilization:ratio
           expr: |
             (rate(node_fibrechannel_tx_words_total[5m]) * 4)
             / on (instance, fc_host) group_left
-            cluster:node:fc:port_speed:bytes_per_second
+            node_hba:fc:port_speed:bytes_per_second
 
         # Receive utilization: rate(rx_words * 4) / speed_bytes.
-        - record: cluster:node:fc:receive_utilization:ratio
+        - record: node_hba:fc:receive_utilization:ratio
           expr: |
             (rate(node_fibrechannel_rx_words_total[5m]) * 4)
             / on (instance, fc_host) group_left
-            cluster:node:fc:port_speed:bytes_per_second
+            node_hba:fc:port_speed:bytes_per_second
 
         # ── FC error counters ────────────────────────────────────
-        - record: cluster:node:fc:error_rate:frames_per_second
+        - record: node_hba:fc:error_rate:frames_per_second
           expr: |
             rate(node_fibrechannel_error_frames_total[5m])
             + rate(node_fibrechannel_invalid_crc_total[5m])
@@ -155,7 +155,7 @@ spec:
         # Loss of signal + loss of sync indicate physical layer
         # problems (cable fault, failing SFP transceiver, loose
         # connector).  Normal value is 0.
-        - record: cluster:node:fc:link_loss_rate:per_second
+        - record: node_hba:fc:link_loss_rate:per_second
           expr: |
             rate(node_fibrechannel_loss_of_signal_total[5m])
             + rate(node_fibrechannel_loss_of_sync_total[5m])

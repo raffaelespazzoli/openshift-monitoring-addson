@@ -30,7 +30,7 @@ spec:
         #   > 0.50 (50%) for 5 min → critical (severe CPU starvation)
         - alert: NodeCPUPressureHigh
           expr: |
-            cluster:node:cpu:pressure:ratio > 0.15
+            node:cpu:pressure:ratio > 0.15
           for: 5m
           labels:
             severity: warning
@@ -48,7 +48,7 @@ spec:
 
         - alert: NodeCPUPressureCritical
           expr: |
-            cluster:node:cpu:pressure:ratio > 0.50
+            node:cpu:pressure:ratio > 0.50
           for: 5m
           labels:
             severity: critical

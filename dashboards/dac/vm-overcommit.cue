@@ -37,8 +37,8 @@ import (
 // ── PromQL building blocks ──────────────────────────────────────────
 //
 // Recording rules pre-compute cluster-wide aggregates:
-//   cluster:vm_memory_actual_used:bytes = sum(kubevirt_vmi_memory_used_bytes)
-//   cluster:vm_cpu_actual_used:cores    = sum(rate(kubevirt_vmi_cpu_usage_seconds_total[5m]))
+//   cluster:capacity:vm_memory_actual_used:bytes = sum(kubevirt_vmi_memory_used_bytes)
+//   cluster:capacity:vm_cpu_actual_used:cores    = sum(rate(kubevirt_vmi_cpu_usage_seconds_total[5m]))
 //
 // Both approaches compute σ the same way: stddev_over_time on the
 // aggregate recording rule.  They differ only in the multiplier:
@@ -57,18 +57,18 @@ _z: "((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 
 #memNormal: """
 	sum(kubevirt_vmi_memory_domain_bytes)
 	/ (
-	  sum(avg_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+	  sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
 	  + \(_z)
-	    * sum(stddev_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+	    * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
 	)
 	"""
 
 #cpuNormal: """
 	sum(vmi:kubevirt_vmi_vcpu:count)
 	/ (
-	  sum(avg_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+	  sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
 	  + \(_z)
-	    * sum(stddev_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+	    * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
 	)
 	"""
 
@@ -77,18 +77,18 @@ _z: "((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 
 #memChebyshev: """
 	sum(kubevirt_vmi_memory_domain_bytes)
 	/ (
-	  sum(avg_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+	  sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
 	  + sqrt(vector($confidence / (1 - $confidence)))
-	    * sum(stddev_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+	    * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
 	)
 	"""
 
 #cpuChebyshev: """
 	sum(vmi:kubevirt_vmi_vcpu:count)
 	/ (
-	  sum(avg_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+	  sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
 	  + sqrt(vector($confidence / (1 - $confidence)))
-	    * sum(stddev_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+	    * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
 	)
 	"""
 

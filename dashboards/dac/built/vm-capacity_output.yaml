@@ -124,8 +124,8 @@ spec:
                 spec:
                   query: |-
                     floor(clamp_max(
-                      cluster:available_capacity_memory:bytes / $vm_memory * $memory_overcommit,
-                      scalar(cluster:available_capacity_cpu:cores / $vm_cpu * $cpu_overcommit)
+                      cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit,
+                      scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
                     ))
     "0_1":
       kind: Panel
@@ -161,9 +161,9 @@ spec:
                 spec:
                   query: |-
                     (
-                      cluster:available_capacity_memory:bytes / $vm_memory * $memory_overcommit
+                      cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit
                       > bool
-                      scalar(cluster:available_capacity_cpu:cores / $vm_cpu * $cpu_overcommit)
+                      scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
                     )
     "0_2":
       kind: Panel
@@ -184,7 +184,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: cluster:memory_cpu_ratio:gib_per_core
+                  query: cluster:capacity:memory_cpu_ratio:gib_per_core
                   seriesNameFormat: GiB per core
     "1_0":
       kind: Panel
@@ -209,21 +209,21 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: cluster:non_vm_used_capacity_memory:bytes
+                  query: cluster:capacity:non_vm_used_memory:bytes
                   seriesNameFormat: Non-VM used
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: cluster:vm_used_capacity_memory:bytes
+                  query: cluster:capacity:vm_used_memory:bytes
                   seriesNameFormat: VM used
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: cluster:available_capacity_memory:bytes
+                  query: cluster:capacity:available_memory:bytes
                   seriesNameFormat: Available
     "1_1":
       kind: Panel
@@ -248,21 +248,21 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: cluster:non_vm_used_capacity_cpu:cores
+                  query: cluster:capacity:non_vm_used_cpu:cores
                   seriesNameFormat: Non-VM used
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: cluster:vm_used_capacity_cpu:cores
+                  query: cluster:capacity:vm_used_cpu:cores
                   seriesNameFormat: VM used
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: cluster:available_capacity_cpu:cores
+                  query: cluster:capacity:available_cpu:cores
                   seriesNameFormat: Available
   layouts:
     - kind: Grid

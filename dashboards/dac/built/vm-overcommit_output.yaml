@@ -87,9 +87,9 @@ spec:
                   query: |-
                     sum(kubevirt_vmi_memory_domain_bytes)
                     / (
-                      sum(avg_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                       + ((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 0.99) * 2.326 + (vector($confidence) == bool 0.995) * 2.576 + (vector($confidence) == bool 0.999) * 3.090 + (vector($confidence) == bool 0.9995) * 3.291 + (vector($confidence) == bool 0.9999) * 3.719)
-                        * sum(stddev_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                     )
                   seriesNameFormat: normal
                   minStep: 5m
@@ -115,9 +115,9 @@ spec:
                   query: |-
                     sum(kubevirt_vmi_memory_domain_bytes)
                     / (
-                      sum(avg_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                       + sqrt(vector($confidence / (1 - $confidence)))
-                        * sum(stddev_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                     )
                   seriesNameFormat: chebyshev
                   minStep: 5m
@@ -143,9 +143,9 @@ spec:
                   query: |-
                     sum(vmi:kubevirt_vmi_vcpu:count)
                     / (
-                      sum(avg_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                       + ((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 0.99) * 2.326 + (vector($confidence) == bool 0.995) * 2.576 + (vector($confidence) == bool 0.999) * 3.090 + (vector($confidence) == bool 0.9995) * 3.291 + (vector($confidence) == bool 0.9999) * 3.719)
-                        * sum(stddev_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                     )
                   seriesNameFormat: normal
                   minStep: 5m
@@ -171,9 +171,9 @@ spec:
                   query: |-
                     sum(vmi:kubevirt_vmi_vcpu:count)
                     / (
-                      sum(avg_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                       + sqrt(vector($confidence / (1 - $confidence)))
-                        * sum(stddev_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                     )
                   seriesNameFormat: chebyshev
                   minStep: 5m
@@ -227,9 +227,9 @@ spec:
                   query: |-
                     sum(kubevirt_vmi_memory_domain_bytes)
                     / (
-                      sum(avg_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                       + ((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 0.99) * 2.326 + (vector($confidence) == bool 0.995) * 2.576 + (vector($confidence) == bool 0.999) * 3.090 + (vector($confidence) == bool 0.9995) * 3.291 + (vector($confidence) == bool 0.9999) * 3.719)
-                        * sum(stddev_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                     )
                   seriesNameFormat: Normal
                   minStep: 5m
@@ -241,9 +241,9 @@ spec:
                   query: |-
                     sum(kubevirt_vmi_memory_domain_bytes)
                     / (
-                      sum(avg_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                       + sqrt(vector($confidence / (1 - $confidence)))
-                        * sum(stddev_over_time(cluster:vm_memory_actual_used:bytes[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_memory_actual_used:bytes[$observation_period]))
                     )
                   seriesNameFormat: Chebyshev
                   minStep: 5m
@@ -275,9 +275,9 @@ spec:
                   query: |-
                     sum(vmi:kubevirt_vmi_vcpu:count)
                     / (
-                      sum(avg_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                       + ((vector($confidence) == bool 0.95) * 1.645 + (vector($confidence) == bool 0.99) * 2.326 + (vector($confidence) == bool 0.995) * 2.576 + (vector($confidence) == bool 0.999) * 3.090 + (vector($confidence) == bool 0.9995) * 3.291 + (vector($confidence) == bool 0.9999) * 3.719)
-                        * sum(stddev_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                     )
                   seriesNameFormat: Normal
                   minStep: 5m
@@ -289,9 +289,9 @@ spec:
                   query: |-
                     sum(vmi:kubevirt_vmi_vcpu:count)
                     / (
-                      sum(avg_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                      sum(avg_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                       + sqrt(vector($confidence / (1 - $confidence)))
-                        * sum(stddev_over_time(cluster:vm_cpu_actual_used:cores[$observation_period]))
+                        * sum(stddev_over_time(cluster:capacity:vm_cpu_actual_used:cores[$observation_period]))
                     )
                   seriesNameFormat: Chebyshev
                   minStep: 5m

@@ -11,7 +11,7 @@ import (
 
 // Combined days-to-exhaustion, capped so +Inf (stable or growing capacity)
 // renders at the gauge maximum instead of overflowing the dial.
-#daysToExhaustion: "clamp_max(cluster:days_to_exhaustion_$observation_period:days, 365)"
+#daysToExhaustion: "clamp_max(cluster:capacity:exhaustion_$observation_period:days, 365)"
 
 #trendQuery: {
 	#query:   string
@@ -122,11 +122,11 @@ dashboardBuilder & {
 							queries: [
 								#trendQuery & {
 									#segment: "Memory"
-									#query:   "cluster:days_to_exhaustion_memory_$observation_period:days"
+									#query:   "cluster:capacity:memory_exhaustion_$observation_period:days"
 								},
 								#trendQuery & {
 									#segment: "CPU"
-									#query:   "cluster:days_to_exhaustion_cpu_$observation_period:days"
+									#query:   "cluster:capacity:cpu_exhaustion_$observation_period:days"
 								},
 							]
 						}

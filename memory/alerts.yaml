@@ -30,7 +30,7 @@ spec:
         # but is on a trajectory to do so.
         - alert: NodeWorkloadMemoryApproachingEviction
           expr: |
-            cluster:node:memory:workloads_utilization:ratio > 0.95
+            node:memory:workloads_utilization:ratio > 0.95
           for: 5m
           labels:
             severity: warning
@@ -58,7 +58,7 @@ spec:
         #   > 0.20 (20%) for 5 min  → critical (severe stalls, OOM likely)
         - alert: NodeMemoryPressureHigh
           expr: |
-            cluster:node:memory:pressure:ratio > 0.05
+            node:memory:pressure:ratio > 0.05
           for: 5m
           labels:
             severity: warning
@@ -76,7 +76,7 @@ spec:
 
         - alert: NodeMemoryPressureCritical
           expr: |
-            cluster:node:memory:pressure:ratio > 0.20
+            node:memory:pressure:ratio > 0.20
           for: 5m
           labels:
             severity: critical
@@ -157,3 +157,82 @@ spec:
               minutes.  The kernel will OOM-kill a process in the pod
               if usage reaches the limit.  Current utilization:
               {{ $value | humanizePercentage }}.
+
+    # ── Hardware memory errors (EDAC / ECC) ──────────────────────
+    #
+    # The EDAC (Error Detection And Correction) subsystem in the
+    # Linux kernel monitors ECC memory hardware.  The node_exporter
+    # edac collector (enabled by default) reads these counters from
+    # /sys/devices/system/edac/mc/.
+    #
+    # Two classes of errors:
+    #   CE (correctable)   — ECC detected and fixed a bit flip.
+    #                        The DIMM is degrading; schedule replacement.
+    #   UE (uncorrectable) — ECC detected an error it could NOT fix.
+    #                        Data corruption has occurred.  Replace DIMM
+    #                        immediately.
+    #
+    # NOTE: EDAC requires ECC memory, which server-grade hardware
+    # (Dell PowerEdge, HPE ProLiant, etc.) always has.  On systems
+    # without ECC, the edac collector produces no series — these
+    # alerts are a safe no-op.
+    - name: capacity-management-ecc-memory.alerts
+      rules:
+        # WARNING: correctable memory errors are accumulating.
+        # The DIMM is still functional but showing signs of
+        # degradation.  A trickle of CE is normal (cosmic rays,
+        # thermal noise), but a sustained rate means the DIMM
+        # should be scheduled for replacement.
+        #
+        # We use a 1h rate window and a 15m for: to filter out
+        # single-event upsets (which are benign) and only fire
+        # on sustained error rates.
+        - alert: MemoryECCCorrectableErrors
+          expr: |
+            rate(node_edac_correctable_errors_total[1h]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Memory controller {{ $labels.controller }} on
+              {{ $labels.instance }} reporting correctable ECC
+              errors.
+            description: >-
+              Correctable memory errors are being detected on
+              memory controller {{ $labels.controller }} of
+              {{ $labels.instance }} at a rate of
+              {{ $value | humanize }}/sec.  The ECC hardware is
+              correcting bit flips, but a sustained rate indicates
+              DIMM degradation.  Schedule DIMM replacement during
+              the next maintenance window.  Use `edac-util -s` or
+              check `dmesg | grep EDAC` on the node to identify
+              the affected DIMM slot.
+
+        # CRITICAL: uncorrectable memory error — data corruption
+        # has occurred.  The ECC hardware detected an error it
+        # could not fix.  This is a "replace the DIMM now" event.
+        #
+        # for: 0m — fire immediately, this is a data integrity
+        # issue that cannot wait.  The increase() over 5m gives
+        # us the debounce against counter resets.
+        - alert: MemoryECCUncorrectableError
+          expr: |
+            increase(node_edac_uncorrectable_errors_total[5m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              CRITICAL: Uncorrectable memory error on controller
+              {{ $labels.controller }}, {{ $labels.instance }}.
+            description: >-
+              An uncorrectable memory error was detected on memory
+              controller {{ $labels.controller }} of
+              {{ $labels.instance }}.  Data corruption has occurred —
+              the ECC hardware could not correct the bit error.
+              Immediate action required: identify and replace the
+              failing DIMM.  Run `edac-util -s` or check
+              `dmesg | grep EDAC` on the node to find the affected
+              slot.  Consider draining workloads from this node
+              until the DIMM is replaced.

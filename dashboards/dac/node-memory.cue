@@ -62,31 +62,31 @@ _sy: "{node=~\"$node\"}" // system (system.slice)
 
 // Panel 1: Full node — stacks from bottom: non-reclaimable, overhead,
 //          hot, cold, free.  Total = capacity.
-#p1_nonReclaim: "sum(cluster:node:memory:workloads_non_reclaimable:bytes" + _wk + ") + sum(cluster:node:memory:system_non_reclaimable:bytes" + _sy + ")"
-#p1_overhead:   "sum(cluster:node:memory:workloads_overhead:bytes" + _wk + ") + sum(cluster:node:memory:system_overhead:bytes" + _sy + ")"
-#p1_hotReclaim: "sum(cluster:node:memory:workloads_hot_reclaimable:bytes" + _wk + ") + sum(cluster:node:memory:system_hot_reclaimable:bytes" + _sy + ")"
-#p1_coldReclaim: "sum(cluster:node:memory:workloads_cold:bytes" + _wk + ") + sum(cluster:node:memory:system_cold:bytes" + _sy + ")"
+#p1_nonReclaim: "sum(node:memory:workloads_non_reclaimable:bytes" + _wk + ") + sum(node:memory:system_non_reclaimable:bytes" + _sy + ")"
+#p1_overhead:   "sum(node:memory:workloads_overhead:bytes" + _wk + ") + sum(node:memory:system_overhead:bytes" + _sy + ")"
+#p1_hotReclaim: "sum(node:memory:workloads_hot_reclaimable:bytes" + _wk + ") + sum(node:memory:system_hot_reclaimable:bytes" + _sy + ")"
+#p1_coldReclaim: "sum(node:memory:workloads_cold:bytes" + _wk + ") + sum(node:memory:system_cold:bytes" + _sy + ")"
 #p1_free: """
 	sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-	- sum(cluster:node:memory:workloads_used:bytes\( _wk ))
-	- sum(cluster:node:memory:system_used:bytes\( _sy ))
+	- sum(node:memory:workloads_used:bytes\( _wk ))
+	- sum(node:memory:system_used:bytes\( _sy ))
 	"""
 
 // Panel 2: Workloads (kubepods.slice) — total = allocatable
-#p2_nonReclaim:  "sum(cluster:node:memory:workloads_non_reclaimable:bytes" + _wk + ")"
-#p2_overhead:    "sum(cluster:node:memory:workloads_overhead:bytes" + _wk + ")"
-#p2_hotReclaim:  "sum(cluster:node:memory:workloads_hot_reclaimable:bytes" + _wk + ")"
-#p2_coldReclaim: "sum(cluster:node:memory:workloads_cold:bytes" + _wk + ")"
+#p2_nonReclaim:  "sum(node:memory:workloads_non_reclaimable:bytes" + _wk + ")"
+#p2_overhead:    "sum(node:memory:workloads_overhead:bytes" + _wk + ")"
+#p2_hotReclaim:  "sum(node:memory:workloads_hot_reclaimable:bytes" + _wk + ")"
+#p2_coldReclaim: "sum(node:memory:workloads_cold:bytes" + _wk + ")"
 #p2_free: """
 	sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
-	- sum(cluster:node:memory:workloads_used:bytes\( _wk ))
+	- sum(node:memory:workloads_used:bytes\( _wk ))
 	"""
 
 // Panel 3: System (system.slice) — no cap (system.slice has memory.max = max)
-#p3_nonReclaim:  "sum(cluster:node:memory:system_non_reclaimable:bytes" + _sy + ")"
-#p3_overhead:    "sum(cluster:node:memory:system_overhead:bytes" + _sy + ")"
-#p3_hotReclaim:  "sum(cluster:node:memory:system_hot_reclaimable:bytes" + _sy + ")"
-#p3_coldReclaim: "sum(cluster:node:memory:system_cold:bytes" + _sy + ")"
+#p3_nonReclaim:  "sum(node:memory:system_non_reclaimable:bytes" + _sy + ")"
+#p3_overhead:    "sum(node:memory:system_overhead:bytes" + _sy + ")"
+#p3_hotReclaim:  "sum(node:memory:system_hot_reclaimable:bytes" + _sy + ")"
+#p3_coldReclaim: "sum(node:memory:system_cold:bytes" + _sy + ")"
 
 // ── Summary stats PromQL ────────────────────────────────────────────
 #allocatable: "sum(kube_node_status_allocatable{resource=\"memory\", node=~\"$node\"})"
@@ -95,8 +95,8 @@ _sy: "{node=~\"$node\"}" // system (system.slice)
 	- sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
 	"""
 #capacity: "sum(kube_node_status_capacity{resource=\"memory\", node=~\"$node\"})"
-#workloadUtilization: "sum(cluster:node:memory:workloads_utilization:ratio" + _wk + ")"
-#systemUsed: "sum(cluster:node:memory:system_used:bytes" + _sy + ")"
+#workloadUtilization: "sum(node:memory:workloads_utilization:ratio" + _wk + ")"
+#systemUsed: "sum(node:memory:system_used:bytes" + _sy + ")"
 
 // ── Dashboard ───────────────────────────────────────────────────────
 

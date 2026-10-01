@@ -52,10 +52,10 @@ resources:
 ```
 .
 ├── kustomization.yaml              # Deploy everything
-├── memory/                         # Node memory breakdown + OOM proximity
+├── memory/                         # Node memory breakdown + OOM proximity + ECC
 │   ├── kustomization.yaml
 │   ├── recording-rules.yaml        # 16 recording rules
-│   └── alerts.yaml                 # 5 alerts
+│   └── alerts.yaml                 # 7 alerts
 ├── cpu/                            # CPU pressure (PSI) + vCPU scheduling delay
 │   ├── kustomization.yaml
 │   ├── recording-rules.yaml        # 4 recording rules
@@ -64,10 +64,10 @@ resources:
 │   ├── kustomization.yaml
 │   ├── recording-rules.yaml        # 7 recording rules
 │   └── alerts.yaml                 # 2 alerts
-├── storage/                        # I/O pressure (PSI) + Fibre Channel
+├── storage/                        # I/O pressure (PSI) + Fibre Channel + DM-Multipath
 │   ├── kustomization.yaml
 │   ├── recording-rules.yaml        # 14 recording rules
-│   └── alerts.yaml                 # 4 alerts
+│   └── alerts.yaml                 # 7 alerts
 ├── capacity/                       # Capacity accounting, exhaustion, overcommit, overhead
 │   ├── kustomization.yaml
 │   ├── recording-rules.yaml        # 32 recording rules
@@ -94,6 +94,29 @@ Each functional area is self-contained: recording rules and alerts within an are
 
 All recording rules and alerts deploy as `PrometheusRule` CRs in `openshift-monitoring` with labels `prometheus: k8s` and `role: alert-rules`, matching the platform Prometheus rule selector.
 
+### Optional: Enable the DM-Multipath Collector
+
+The **DM-multipath path health alerts** (`MultipathPathDegraded`, `MultipathPathCritical`, `MultipathDeviceSuspended`) require the node_exporter `dmmultipath` collector, which is **disabled by default in OpenShift**'s node_exporter configuration.
+
+To enable it, patch the `cluster-monitoring-config` ConfigMap in `openshift-monitoring`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    nodeExporter:
+      collectors:
+        dmmultipath: {}
+```
+
+If you already have a `cluster-monitoring-config` ConfigMap, merge the `nodeExporter.collectors.dmmultipath: {}` entry into your existing `config.yaml`. The Cluster Monitoring Operator will roll-restart node_exporter DaemonSet pods automatically.
+
+> **If you skip this step**, the multipath alerts are a safe no-op — they simply produce no series and never fire.
+
 ---
 
 ## Memory
@@ -107,20 +130,20 @@ Node-level memory decomposition, memory pressure (PSI), and OOM proximity detect
 
 | Rule | Expression (abbreviated) | Description |
 |------|--------------------------|-------------|
-| `cluster:node:memory:workloads_utilization:ratio` | `sum by (node)(working_set{kubepods.slice}) / allocatable{memory}` | Fraction of allocatable memory occupied by workload working set — the kubelet eviction metric |
-| `cluster:node:memory:pressure:ratio` | `rate(pressure_memory_waiting{id="/"}[5m])` | Fraction of wall-clock time at least one process was stalled waiting for memory (PSI "some") |
-| `cluster:node:memory:workloads_used:bytes` | `sum by (node)(usage{kubepods.slice})` | Total memory charged to all pods (memory.current) |
-| `cluster:node:memory:workloads_non_reclaimable:bytes` | `sum by (node)(rss{kubepods.slice})` | Anonymous memory (heap, stack) — NOT reclaimable without swap |
-| `cluster:node:memory:workloads_cold:bytes` | `sum by (node)(inactive_file{kubepods.slice})` | Inactive file cache — coldest pages, reclaimed first |
-| `cluster:node:memory:workloads_hot_reclaimable:bytes` | `sum by (node)(active_file{kubepods.slice})` | Active file cache — reclaimable under pressure at a performance cost |
-| `cluster:node:memory:workloads_overhead:bytes` | `used - rss - inactive_file - active_file` | Kernel overhead (slab, kernel_stack, sock, pagetables) |
-| `cluster:node:memory:workloads_swap:bytes` | `sum by (node)(swap{kubepods.slice})` | Swap used by workloads |
-| `cluster:node:memory:system_used:bytes` | `sum by (node)(usage{system.slice})` | Total memory charged to system.slice |
-| `cluster:node:memory:system_non_reclaimable:bytes` | `sum by (node)(rss{system.slice})` | Anonymous memory in system.slice |
-| `cluster:node:memory:system_cold:bytes` | `sum by (node)(inactive_file{system.slice})` | Inactive file cache in system.slice |
-| `cluster:node:memory:system_hot_reclaimable:bytes` | `sum by (node)(active_file{system.slice})` | Active file cache in system.slice |
-| `cluster:node:memory:system_overhead:bytes` | `used - rss - inactive_file - active_file` | Kernel overhead in system.slice |
-| `cluster:node:memory:system_swap:bytes` | `sum by (node)(swap{system.slice})` | Swap used by system services |
+| `node:memory:workloads_utilization:ratio` | `sum by (node)(working_set{kubepods.slice}) / allocatable{memory}` | Fraction of allocatable memory occupied by workload working set — the kubelet eviction metric |
+| `node:memory:pressure:ratio` | `rate(pressure_memory_waiting{id="/"}[5m])` | Fraction of wall-clock time at least one process was stalled waiting for memory (PSI "some") |
+| `node:memory:workloads_used:bytes` | `sum by (node)(usage{kubepods.slice})` | Total memory charged to all pods (memory.current) |
+| `node:memory:workloads_non_reclaimable:bytes` | `sum by (node)(rss{kubepods.slice})` | Anonymous memory (heap, stack) — NOT reclaimable without swap |
+| `node:memory:workloads_cold:bytes` | `sum by (node)(inactive_file{kubepods.slice})` | Inactive file cache — coldest pages, reclaimed first |
+| `node:memory:workloads_hot_reclaimable:bytes` | `sum by (node)(active_file{kubepods.slice})` | Active file cache — reclaimable under pressure at a performance cost |
+| `node:memory:workloads_overhead:bytes` | `used - rss - inactive_file - active_file` | Kernel overhead (slab, kernel_stack, sock, pagetables) |
+| `node:memory:workloads_swap:bytes` | `sum by (node)(swap{kubepods.slice})` | Swap used by workloads |
+| `node:memory:system_used:bytes` | `sum by (node)(usage{system.slice})` | Total memory charged to system.slice |
+| `node:memory:system_non_reclaimable:bytes` | `sum by (node)(rss{system.slice})` | Anonymous memory in system.slice |
+| `node:memory:system_cold:bytes` | `sum by (node)(inactive_file{system.slice})` | Inactive file cache in system.slice |
+| `node:memory:system_hot_reclaimable:bytes` | `sum by (node)(active_file{system.slice})` | Active file cache in system.slice |
+| `node:memory:system_overhead:bytes` | `used - rss - inactive_file - active_file` | Kernel overhead in system.slice |
+| `node:memory:system_swap:bytes` | `sum by (node)(swap{system.slice})` | Swap used by system services |
 | `container:memory:working_set_utilization:ratio` | `working_set / kube_pod_container_resource_limits{memory}` | Per-container working_set / limit — OOM proximity |
 | `pod:memory:working_set_utilization:ratio` | `working_set{pod cgroup} / memory.max{pod cgroup}` | Per-pod working_set / pod cgroup limit — OOM proximity |
 
@@ -129,7 +152,7 @@ Node-level memory decomposition, memory pressure (PSI), and OOM proximity detect
 ### Alerts
 
 <details>
-<summary>5 alerts — click to expand</summary>
+<summary>7 alerts — click to expand</summary>
 
 | Alert | Expression (abbreviated) | Severity | For | Description |
 |-------|--------------------------|----------|-----|-------------|
@@ -138,6 +161,10 @@ Node-level memory decomposition, memory pressure (PSI), and OOM proximity detect
 | `NodeMemoryPressureCritical` | `pressure:ratio > 0.20` | critical | 5m | >20% wall-clock time stalled — severe reclaim pressure, OOM likely |
 | `ContainerMemoryApproachingOOM` | `working_set_utilization:ratio > 0.95` | warning | 5m | Container working_set exceeds 95% of its memory limit |
 | `PodMemoryApproachingOOM` | `pod working_set_utilization:ratio > 0.95` | warning | 5m | Pod total working_set exceeds 95% of pod-level memory limit |
+| `MemoryECCCorrectableErrors` | `rate(node_edac_correctable_errors_total[1h]) > 0` | warning | 15m | Sustained correctable ECC errors on a memory controller — DIMM degrading |
+| `MemoryECCUncorrectableError` | `increase(node_edac_uncorrectable_errors_total[5m]) > 0` | critical | 0m | Uncorrectable memory error — data corruption, replace DIMM immediately |
+
+> **Note:** EDAC alerts require ECC memory, which server-grade hardware always has. On systems without ECC, these alerts are a safe no-op.
 
 </details>
 
@@ -168,7 +195,7 @@ CPU pressure (PSI) at the node, pod, and container level, plus VM vCPU host-sche
 
 | Rule | Expression (abbreviated) | Description |
 |------|--------------------------|-------------|
-| `cluster:node:cpu:pressure:ratio` | `rate(pressure_cpu_waiting{id="/"}[5m])` | Fraction of wall-clock time at least one runnable task waited for a CPU (PSI "some") |
+| `node:cpu:pressure:ratio` | `rate(pressure_cpu_waiting{id="/"}[5m])` | Fraction of wall-clock time at least one runnable task waited for a CPU (PSI "some") |
 | `pod:cpu:pressure:ratio` | `rate(pressure_cpu_waiting{container="", pod!=""}[5m])` | Per-pod CPU pressure from pod-level cgroups |
 | `container:cpu:pressure:ratio` | `rate(pressure_cpu_waiting{container!=""}[5m])` | Per-container CPU pressure |
 | `vmi:cpu:vcpu_delay:ratio` | `sum by (ns, name, node)(rate(vcpu_delay_seconds_total[5m]))` | Per-VM vCPU host-scheduling delay — time vCPUs spent in the host scheduler queue |
@@ -201,10 +228,10 @@ Per-NIC bandwidth utilization vs link speed, packet drop/error rates, and per-VM
 
 | Rule | Expression (abbreviated) | Description |
 |------|--------------------------|-------------|
-| `cluster:node:nic:transmit_utilization:ratio` | `rate(tx_bytes[5m]) / speed_bytes` | Per-NIC transmit utilization vs link speed (physical NICs only) |
-| `cluster:node:nic:receive_utilization:ratio` | `rate(rx_bytes[5m]) / speed_bytes` | Per-NIC receive utilization vs link speed |
-| `cluster:node:nic:drop_rate:packets_per_second` | `rate(rx_drop + tx_drop[5m])` | Per-NIC packet drop rate (ring buffer overflow, queue full) |
-| `cluster:node:nic:error_rate:packets_per_second` | `rate(rx_errs + tx_errs[5m])` | Per-NIC packet error rate (CRC failures, runt/giant frames) |
+| `node_nic:network:transmit_utilization:ratio` | `rate(tx_bytes[5m]) / speed_bytes` | Per-NIC transmit utilization vs link speed (physical NICs only) |
+| `node_nic:network:receive_utilization:ratio` | `rate(rx_bytes[5m]) / speed_bytes` | Per-NIC receive utilization vs link speed |
+| `node_nic:network:drop_rate:packets_per_second` | `rate(rx_drop + tx_drop[5m])` | Per-NIC packet drop rate (ring buffer overflow, queue full) |
+| `node_nic:network:error_rate:packets_per_second` | `rate(rx_errs + tx_errs[5m])` | Per-NIC packet error rate (CRC failures, runt/giant frames) |
 | `vmi:network:drop_rate:packets_per_second` | `sum by (ns, name, node)(rate(vmi rx+tx dropped[5m]))` | Per-VM network packet drops |
 | `vmi:network:error_rate:packets_per_second` | `sum by (ns, name, node)(rate(vmi rx+tx errors[5m]))` | Per-VM network packet errors |
 | `vmi:network:throughput:bytes_per_second` | `sum by (ns, name, node)(rate(vmi rx+tx bytes[5m]))` | Per-VM network throughput (rx + tx) |
@@ -227,7 +254,7 @@ Per-NIC bandwidth utilization vs link speed, packet drop/error rates, and per-VM
 
 ## Storage
 
-I/O pressure (PSI) at all scopes, Fibre Channel HBA monitoring, and per-VM storage latency/throughput.
+I/O pressure (PSI) at all scopes, Fibre Channel HBA monitoring, DM-multipath path health, and per-VM storage latency/throughput.
 
 ### Recording Rules
 
@@ -236,27 +263,27 @@ I/O pressure (PSI) at all scopes, Fibre Channel HBA monitoring, and per-VM stora
 
 | Rule | Expression (abbreviated) | Description |
 |------|--------------------------|-------------|
-| `cluster:node:io:pressure_waiting:ratio` | `rate(io_waiting{id="/"}[5m])` | Node-wide I/O pressure — "some" (at least one task waiting) |
-| `cluster:node:io:pressure_stalled:ratio` | `rate(io_stalled{id="/"}[5m])` | Node-wide I/O pressure — "full" (ALL tasks stalled) |
+| `node:io:pressure_waiting:ratio` | `rate(io_waiting{id="/"}[5m])` | Node-wide I/O pressure — "some" (at least one task waiting) |
+| `node:io:pressure_stalled:ratio` | `rate(io_stalled{id="/"}[5m])` | Node-wide I/O pressure — "full" (ALL tasks stalled) |
 | `pod:io:pressure_waiting:ratio` | `rate(io_waiting{pod cgroup}[5m])` | Per-pod I/O pressure — "some" |
 | `pod:io:pressure_stalled:ratio` | `rate(io_stalled{pod cgroup}[5m])` | Per-pod I/O pressure — "full" |
 | `container:io:pressure_waiting:ratio` | `rate(io_waiting{container cgroup}[5m])` | Per-container I/O pressure — "some" |
 | `container:io:pressure_stalled:ratio` | `rate(io_stalled{container cgroup}[5m])` | Per-container I/O pressure — "full" |
-| `vmi:storage:read_latency:seconds` | `rate(read_times[5m]) / rate(iops_read[5m])` | Per-VM per-drive storage read latency (seconds per op) |
-| `vmi:storage:write_latency:seconds` | `rate(write_times[5m]) / rate(iops_write[5m])` | Per-VM per-drive storage write latency (seconds per op) |
-| `vmi:storage:throughput:bytes_per_second` | `sum by (ns,name,node)(rate(read+write traffic[5m]))` | Per-VM total storage throughput |
-| `cluster:node:fc:port_speed:bytes_per_second` | `node_fibrechannel_info{speed} → bytes/sec` | FC port speed label converted to numeric gauge |
-| `cluster:node:fc:transmit_utilization:ratio` | `rate(tx_words * 4[5m]) / port_speed` | Per-FC-HBA transmit utilization vs link speed |
-| `cluster:node:fc:receive_utilization:ratio` | `rate(rx_words * 4[5m]) / port_speed` | Per-FC-HBA receive utilization vs link speed |
-| `cluster:node:fc:error_rate:frames_per_second` | `rate(error_frames + invalid_crc[5m])` | FC error frame rate (bad SFP, cable, ISL congestion) |
-| `cluster:node:fc:link_loss_rate:per_second` | `rate(loss_of_signal + loss_of_sync[5m])` | FC physical layer problems (cable fault, failing SFP) |
+| `vmi:io:read_latency:seconds` | `rate(read_times[5m]) / rate(iops_read[5m])` | Per-VM per-drive storage read latency (seconds per op) |
+| `vmi:io:write_latency:seconds` | `rate(write_times[5m]) / rate(iops_write[5m])` | Per-VM per-drive storage write latency (seconds per op) |
+| `vmi:io:throughput:bytes_per_second` | `sum by (ns,name,node)(rate(read+write traffic[5m]))` | Per-VM total storage throughput |
+| `node_hba:fc:port_speed:bytes_per_second` | `node_fibrechannel_info{speed} → bytes/sec` | FC port speed label converted to numeric gauge |
+| `node_hba:fc:transmit_utilization:ratio` | `rate(tx_words * 4[5m]) / port_speed` | Per-FC-HBA transmit utilization vs link speed |
+| `node_hba:fc:receive_utilization:ratio` | `rate(rx_words * 4[5m]) / port_speed` | Per-FC-HBA receive utilization vs link speed |
+| `node_hba:fc:error_rate:frames_per_second` | `rate(error_frames + invalid_crc[5m])` | FC error frame rate (bad SFP, cable, ISL congestion) |
+| `node_hba:fc:link_loss_rate:per_second` | `rate(loss_of_signal + loss_of_sync[5m])` | FC physical layer problems (cable fault, failing SFP) |
 
 </details>
 
 ### Alerts
 
 <details>
-<summary>4 alerts — click to expand</summary>
+<summary>7 alerts — click to expand</summary>
 
 | Alert | Expression (abbreviated) | Severity | For | Description |
 |-------|--------------------------|----------|-----|-------------|
@@ -264,8 +291,11 @@ I/O pressure (PSI) at all scopes, Fibre Channel HBA monitoring, and per-VM stora
 | `NodeIOPressureCritical` | `io:pressure_stalled:ratio > 0.15` | critical | 5m | >15% wall-clock time with ALL tasks stalled on I/O — zero progress |
 | `NodeFCHBASaturationWarning` | `fc transmit/receive utilization > 0.70` | warning | 5m | FC HBA sustained >70% bandwidth — credit starvation possible |
 | `NodeFCHBASaturationCritical` | `fc transmit/receive utilization > 0.85` | critical | 5m | FC HBA sustained >85% bandwidth — near saturation |
+| `MultipathPathDegraded` | `node_dmmultipath_device_paths_failed > 0` | warning | 5m | One or more multipath paths failed — redundancy degraded |
+| `MultipathPathCritical` | `paths_failed >= paths / 2` | critical | 2m | Half or more paths failed — high risk of total path loss |
+| `MultipathDeviceSuspended` | `node_dmmultipath_device_active == 0` | critical | 1m | Device-mapper device suspended — ALL I/O blocked |
 
-> **Note:** FC alerts are a safe no-op on clusters without Fibre Channel storage. They only fire when the node_exporter fibrechannel collector is enabled and FC HBAs are present.
+> **Note:** FC alerts are a safe no-op on clusters without Fibre Channel storage. DM-multipath alerts require the `dmmultipath` node_exporter collector to be enabled — see the [Dependencies](#optional-enable-the-dm-multipath-collector) section for instructions.
 
 </details>
 
@@ -284,39 +314,39 @@ Cross-functional capacity accounting, time-to-exhaustion projections, VM overcom
 
 | Rule | Expression (abbreviated) | Description |
 |------|--------------------------|-------------|
-| `capacity:nodes_down:count` | `vector(1)` | HA reserve — how many largest nodes to hold back from total capacity |
-| `cluster:total_capacity_memory:bytes` | `sum(allocatable{schedulable}) - max(allocatable) × nodes_down` | Schedulable memory minus the HA reserve |
-| `cluster:used_capacity_memory:bytes` | `sum(pod_resource_request{memory, schedulable})` | Memory requests on schedulable nodes |
-| `cluster:available_capacity_memory:bytes` | `total - used` | Available memory capacity |
-| `cluster:vm_used_capacity_memory:bytes` | `sum(request{memory, virt-launcher-.*})` | Memory requests of virt-launcher pods |
-| `cluster:non_vm_used_capacity_memory:bytes` | `sum(request{memory, !virt-launcher})` | Memory requests of every other pod |
-| `cluster:total_capacity_cpu:cores` | `sum(allocatable{cpu, schedulable}) - max × nodes_down` | Schedulable CPU minus the HA reserve |
-| `cluster:used_capacity_cpu:cores` | `sum(pod_resource_request{cpu, schedulable})` | CPU requests on schedulable nodes |
-| `cluster:available_capacity_cpu:cores` | `total - used` | Available CPU capacity |
-| `cluster:vm_used_capacity_cpu:cores` | `sum(request{cpu, virt-launcher-.*})` | CPU requests of virt-launcher pods |
-| `cluster:non_vm_used_capacity_cpu:cores` | `sum(request{cpu, !virt-launcher})` | CPU requests of every other pod |
-| `cluster:memory_cpu_ratio:gib_per_core` | `used_memory_GiB / used_cpu_cores` | Memory-to-CPU ratio — ideal node shape for workload |
-| `cluster:vm_memory_usage:bytes` | `sum(working_set{virt-launcher})` | Actual memory usage of VM containers |
-| `cluster:non_vm_memory_usage:bytes` | `sum(working_set{!virt-launcher})` | Actual memory usage of non-VM containers |
-| `cluster:vm_cpu_usage:cores` | `sum(rate(cpu_usage{virt-launcher}[5m]))` | Actual CPU usage of VM containers |
-| `cluster:non_vm_cpu_usage:cores` | `sum(rate(cpu_usage{!virt-launcher}[5m]))` | Actual CPU usage of non-VM containers |
-| `cluster:vm_memory_actual_used:bytes` | `sum(kubevirt_vmi_memory_used_bytes)` | Aggregate VM memory usage (guest-level) |
-| `cluster:vm_cpu_actual_used:cores` | `sum(rate(kubevirt_vmi_cpu_usage_seconds_total[5m]))` | Aggregate VM CPU usage (guest-level) |
+| `cluster:capacity:nodes_down:count` | `vector(1)` | HA reserve — how many largest nodes to hold back from total capacity |
+| `cluster:capacity:total_memory:bytes` | `sum(allocatable{schedulable}) - max(allocatable) × nodes_down` | Schedulable memory minus the HA reserve |
+| `cluster:capacity:used_memory:bytes` | `sum(pod_resource_request{memory, schedulable})` | Memory requests on schedulable nodes |
+| `cluster:capacity:available_memory:bytes` | `total - used` | Available memory capacity |
+| `cluster:capacity:vm_used_memory:bytes` | `sum(request{memory, virt-launcher-.*})` | Memory requests of virt-launcher pods |
+| `cluster:capacity:non_vm_used_memory:bytes` | `sum(request{memory, !virt-launcher})` | Memory requests of every other pod |
+| `cluster:capacity:total_cpu:cores` | `sum(allocatable{cpu, schedulable}) - max × nodes_down` | Schedulable CPU minus the HA reserve |
+| `cluster:capacity:used_cpu:cores` | `sum(pod_resource_request{cpu, schedulable})` | CPU requests on schedulable nodes |
+| `cluster:capacity:available_cpu:cores` | `total - used` | Available CPU capacity |
+| `cluster:capacity:vm_used_cpu:cores` | `sum(request{cpu, virt-launcher-.*})` | CPU requests of virt-launcher pods |
+| `cluster:capacity:non_vm_used_cpu:cores` | `sum(request{cpu, !virt-launcher})` | CPU requests of every other pod |
+| `cluster:capacity:memory_cpu_ratio:gib_per_core` | `used_memory_GiB / used_cpu_cores` | Memory-to-CPU ratio — ideal node shape for workload |
+| `cluster:capacity:vm_memory_usage:bytes` | `sum(working_set{virt-launcher})` | Actual memory usage of VM containers |
+| `cluster:capacity:non_vm_memory_usage:bytes` | `sum(working_set{!virt-launcher})` | Actual memory usage of non-VM containers |
+| `cluster:capacity:vm_cpu_usage:cores` | `sum(rate(cpu_usage{virt-launcher}[5m]))` | Actual CPU usage of VM containers |
+| `cluster:capacity:non_vm_cpu_usage:cores` | `sum(rate(cpu_usage{!virt-launcher}[5m]))` | Actual CPU usage of non-VM containers |
+| `cluster:capacity:vm_memory_actual_used:bytes` | `sum(kubevirt_vmi_memory_used_bytes)` | Aggregate VM memory usage (guest-level) |
+| `cluster:capacity:vm_cpu_actual_used:cores` | `sum(rate(kubevirt_vmi_cpu_usage_seconds_total[5m]))` | Aggregate VM CPU usage (guest-level) |
 
 **Virt-launcher overhead (2 rules)**
 
 | Rule | Expression (abbreviated) | Description |
 |------|--------------------------|-------------|
-| `vmi:virt_launcher_overhead_memory:bytes` | `pod_working_set - guest_resident_bytes` | Per-VM memory overhead (QEMU structures, virtio buffers, etc.) |
-| `vmi:virt_launcher_overhead_cpu:cores` | `pod_cpu_rate - guest_cpu_rate` | Per-VM CPU overhead |
+| `vmi:capacity:launcher_overhead_memory:bytes` | `pod_working_set - guest_resident_bytes` | Per-VM memory overhead (QEMU structures, virtio buffers, etc.) |
+| `vmi:capacity:launcher_overhead_cpu:cores` | `pod_cpu_rate - guest_cpu_rate` | Per-VM CPU overhead |
 
 **Time-to-exhaustion (12 rules)**
 
 | Rule | Window | Description |
 |------|--------|-------------|
-| `cluster:days_to_exhaustion_memory_<W>:days` | 7d, 30d, 180d, 360d | Days until memory capacity runs out (deriv-based projection) |
-| `cluster:days_to_exhaustion_cpu_<W>:days` | 7d, 30d, 180d, 360d | Days until CPU capacity runs out |
-| `cluster:days_to_exhaustion_<W>:days` | 7d, 30d, 180d, 360d | Days until whichever resource exhausts first |
+| `cluster:capacity:memory_exhaustion_<W>:days` | 7d, 30d, 180d, 360d | Days until memory capacity runs out (deriv-based projection) |
+| `cluster:capacity:cpu_exhaustion_<W>:days` | 7d, 30d, 180d, 360d | Days until CPU capacity runs out |
+| `cluster:capacity:exhaustion_<W>:days` | 7d, 30d, 180d, 360d | Days until whichever resource exhausts first |
 
 > **Note:** The 180d and 360d windows require matching Prometheus retention. On clusters with the default 15-day retention, these rules return no data and cost nothing.
 
@@ -393,7 +423,7 @@ These rules are designed to be lightweight. Below are reference measurements fro
 | Metric | Estimated | Notes |
 |--------|-----------|-------|
 | Recording rules | 73 | Across all functional areas |
-| Alert rules | 15 | Fire only — zero stored series when healthy |
+| Alert rules | 20 | Fire only — zero stored series when healthy |
 | Output time series | **~3,820** | Per evaluation cycle |
 | CPU per evaluation | ~74 ms | 0.25% of the 30s evaluation budget |
 | Memory overhead | ~14.9 MB | TSDB head block (in-memory active series) |
@@ -416,8 +446,8 @@ The 73 recording rules produce time series at different scopes. Some are constan
 | Per VM (×V) | 9 | 9 × V | 270 |
 | Per VM drive (×V×D) | 2 | 2 × V × D | 120 |
 | Per FC HBA (×FC) | 5 | 5 × FC | 0 |
-| Alert rules | 15 | ~0 (fire only) | 0 |
-| **Total** | **90** | | **3,820** |
+| Alert rules | 20 | ~0 (fire only) | 0 |
+| **Total** | **95** | | **3,820** |
 
 **The dominant cost is per-pod and per-container rules** (PSI and OOM proximity). On a cluster with P pods and C containers-with-limits, they produce `4P + 4C` series. On a 3,000-pod / 5,000-container production cluster, that's 32,000 series from those rules alone — still manageable, but consider raising the evaluation interval for the PSI groups from 30s to 60s or 120s on very large clusters.
 
@@ -517,7 +547,7 @@ rate(prometheus_tsdb_compaction_chunk_size_bytes_sum[1h])
 
 | What | Where | Default |
 |------|-------|---------|
-| HA reserve (nodes held back) | `capacity/recording-rules.yaml` → `capacity:nodes_down:count` | `vector(1)` — one node |
+| HA reserve (nodes held back) | `capacity/recording-rules.yaml` → `cluster:capacity:nodes_down:count` | `vector(1)` — one node |
 | VM shape / overcommit | Dashboard variables (query-time, not rules) | 8 GiB / 4 vCPU / 1× |
 | Alert thresholds | Each area's `alerts.yaml` | See tables above |
 | PSI evaluation interval | Per-group `interval` field in recording rules | 30s (OpenShift default) |

@@ -36,7 +36,7 @@ spec:
         # inherently bursty (backups, compaction, ODF rebalance).
         - alert: NodeIOPressureWarning
           expr: |
-            cluster:node:io:pressure_waiting:ratio > 0.50
+            node:io:pressure_waiting:ratio > 0.50
           for: 10m
           labels:
             severity: warning
@@ -57,7 +57,7 @@ spec:
 
         - alert: NodeIOPressureCritical
           expr: |
-            cluster:node:io:pressure_stalled:ratio > 0.15
+            node:io:pressure_stalled:ratio > 0.15
           for: 5m
           labels:
             severity: critical
@@ -89,9 +89,9 @@ spec:
         - alert: NodeFCHBASaturationWarning
           expr: |
             (
-              cluster:node:fc:transmit_utilization:ratio > 0.70
+              node_hba:fc:transmit_utilization:ratio > 0.70
             or
-              cluster:node:fc:receive_utilization:ratio > 0.70
+              node_hba:fc:receive_utilization:ratio > 0.70
             )
           for: 5m
           labels:
@@ -113,9 +113,9 @@ spec:
         - alert: NodeFCHBASaturationCritical
           expr: |
             (
-              cluster:node:fc:transmit_utilization:ratio > 0.85
+              node_hba:fc:transmit_utilization:ratio > 0.85
             or
-              cluster:node:fc:receive_utilization:ratio > 0.85
+              node_hba:fc:receive_utilization:ratio > 0.85
             )
           for: 5m
           labels:
@@ -134,3 +134,92 @@ spec:
               verify multipath balancing, check ISL capacity, or
               upgrade port speed.
               Current utilization: {{ $value | humanizePercentage }}.
+
+    # ── DM-Multipath path health ─────────────────────────────────
+    #
+    # Monitors DM-multipath device path state using the node_exporter
+    # dmmultipath collector metrics.
+    #
+    # PREREQUISITE: The dmmultipath collector is DISABLED by default
+    # in OpenShift's node_exporter configuration.  You must enable it
+    # by patching the cluster-monitoring-config ConfigMap.  See the
+    # README for instructions.
+    #
+    # When the collector is not enabled or no multipath devices exist,
+    # these alerts produce no series (safe no-op).
+    - name: capacity-management-multipath.alerts
+      rules:
+        # WARNING: One or more paths are down but the device is still
+        # serving I/O via the remaining active paths.  Redundancy is
+        # degraded — one more failure may lose the device entirely.
+        - alert: MultipathPathDegraded
+          expr: |
+            node_dmmultipath_device_paths_failed > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Multipath device {{ $labels.device }}
+              ({{ $labels.sysfs_name }}) on {{ $labels.instance }}
+              has {{ $value }} failed path(s).
+            description: >-
+              The DM-multipath device {{ $labels.device }}
+              ({{ $labels.sysfs_name }}) on {{ $labels.instance }}
+              has {{ $value }} path(s) in a non-active state
+              (not SCSI "running" or NVMe "live").  I/O continues
+              via the remaining active paths, but path redundancy
+              is degraded.  Investigate cable connectivity, HBA
+              health, and storage array port status.
+
+        # CRITICAL: Half or more paths are down — one more failure
+        # will lose the device.  This is distinct from the warning
+        # above because it indicates a systemic fabric issue, not
+        # just a single path failure.
+        - alert: MultipathPathCritical
+          expr: |
+            (
+              node_dmmultipath_device_paths_failed
+              >= node_dmmultipath_device_paths / 2
+            )
+            and node_dmmultipath_device_paths_failed > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Multipath device {{ $labels.device }} on
+              {{ $labels.instance }} — {{ $value }} of
+              {{ with printf `node_dmmultipath_device_paths{device="%s",instance="%s"}` $labels.device $labels.instance | query }}{{ . | first | value }}{{ end }}
+              paths failed.
+            description: >-
+              Half or more of the I/O paths for DM-multipath device
+              {{ $labels.device }} ({{ $labels.sysfs_name }}) on
+              {{ $labels.instance }} are in a failed state.  The
+              device is at high risk of total path loss.  Immediate
+              action required: check storage fabric, HBA ports,
+              and array controller connectivity.
+
+        # CRITICAL: The device-mapper device itself is suspended.
+        # All I/O to this device is blocked — workloads using this
+        # device will hang.
+        - alert: MultipathDeviceSuspended
+          expr: |
+            node_dmmultipath_device_active == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Multipath device {{ $labels.device }}
+              ({{ $labels.sysfs_name }}) on {{ $labels.instance }}
+              is SUSPENDED.
+            description: >-
+              The DM-multipath device {{ $labels.device }}
+              ({{ $labels.sysfs_name }}) on {{ $labels.instance }}
+              is in a suspended state — ALL I/O to this device is
+              blocked.  Workloads using this device are hanging.
+              Immediate action required: check `dmsetup status`,
+              investigate why the device was suspended, and resume
+              it with `dmsetup resume` once the underlying issue
+              is resolved.

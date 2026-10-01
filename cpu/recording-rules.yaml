@@ -30,8 +30,8 @@ spec:
     - name: capacity-management-cpu-pressure.rules
       rules:
         # Node-wide CPU pressure from the root cgroup.
-        # Mirrors cluster:node:memory:pressure:ratio.
-        - record: cluster:node:cpu:pressure:ratio
+        # Mirrors node:memory:pressure:ratio.
+        - record: node:cpu:pressure:ratio
           expr: |
             rate(
               container_pressure_cpu_waiting_seconds_total{id="/"}[5m]

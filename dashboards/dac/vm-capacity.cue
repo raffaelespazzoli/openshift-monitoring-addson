@@ -16,8 +16,8 @@ import (
 // Prometheus parses min() as an aggregator, so min(a, b) is a query error.
 #vmsThatFit: """
 	floor(clamp_max(
-	  cluster:available_capacity_memory:bytes / $vm_memory * $memory_overcommit,
-	  scalar(cluster:available_capacity_cpu:cores / $vm_cpu * $cpu_overcommit)
+	  cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit,
+	  scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
 	))
 	"""
 
@@ -25,9 +25,9 @@ import (
 // turn that into "CPU bound" / "Memory bound".
 #limitedBy: """
 	(
-	  cluster:available_capacity_memory:bytes / $vm_memory * $memory_overcommit
+	  cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit
 	  > bool
-	  scalar(cluster:available_capacity_cpu:cores / $vm_cpu * $cpu_overcommit)
+	  scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
 	)
 	"""
 
@@ -205,7 +205,7 @@ dashboardBuilder & {
 									kind: "TimeSeriesQuery"
 									spec: plugin: promQuery & {
 										spec: {
-											query:            "cluster:memory_cpu_ratio:gib_per_core"
+											query:            "cluster:capacity:memory_cpu_ratio:gib_per_core"
 											seriesNameFormat: "GiB per core"
 										}
 									}
@@ -227,15 +227,15 @@ dashboardBuilder & {
 							queries: [
 								#stackedQuery & {
 									#segment: "Non-VM used"
-									#query:   "cluster:non_vm_used_capacity_memory:bytes"
+									#query:   "cluster:capacity:non_vm_used_memory:bytes"
 								},
 								#stackedQuery & {
 									#segment: "VM used"
-									#query:   "cluster:vm_used_capacity_memory:bytes"
+									#query:   "cluster:capacity:vm_used_memory:bytes"
 								},
 								#stackedQuery & {
 									#segment: "Available"
-									#query:   "cluster:available_capacity_memory:bytes"
+									#query:   "cluster:capacity:available_memory:bytes"
 								},
 							]
 						}
@@ -247,15 +247,15 @@ dashboardBuilder & {
 							queries: [
 								#stackedQuery & {
 									#segment: "Non-VM used"
-									#query:   "cluster:non_vm_used_capacity_cpu:cores"
+									#query:   "cluster:capacity:non_vm_used_cpu:cores"
 								},
 								#stackedQuery & {
 									#segment: "VM used"
-									#query:   "cluster:vm_used_capacity_cpu:cores"
+									#query:   "cluster:capacity:vm_used_cpu:cores"
 								},
 								#stackedQuery & {
 									#segment: "Available"
-									#query:   "cluster:available_capacity_cpu:cores"
+									#query:   "cluster:capacity:available_cpu:cores"
 								},
 							]
 						}
