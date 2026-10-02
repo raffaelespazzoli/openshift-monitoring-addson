@@ -14,7 +14,6 @@ import (
 // Chart templates
 // ══════════════════════════════════════════════════════════════════════
 
-// Gauge chart — workload utilization ratio with color thresholds.
 #gaugeChart: {
 	kind: "GaugeChart"
 	spec: {
@@ -33,16 +32,6 @@ import (
 	}
 }
 
-// Compact time series — used inline in summary rows for system used
-// and PSI pressure.  No legend (too small), thin lines.
-#sparkBytes: {
-	kind: "TimeSeriesChart"
-	spec: {
-		legend: {position: "bottom", mode: "list"}
-		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
-		yAxis: format: unit: "bytes"
-	}
-}
 #sparkRatio: {
 	kind: "TimeSeriesChart"
 	spec: {
@@ -51,16 +40,27 @@ import (
 		yAxis: format: unit: "percent"
 	}
 }
+
 #sparkCores: {
 	kind: "TimeSeriesChart"
 	spec: {
 		legend: {position: "bottom", mode: "list"}
 		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
 		yAxis: format: unit: "decimal"
+		...
 	}
 }
 
-// Line chart for ratios 0–1 displayed as percentages (PSI, utilization).
+#stackedAreaChart: {
+	kind: "TimeSeriesChart"
+	spec: {
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0.7, stack: "all", lineWidth: 2, ...}
+		yAxis: format: unit: "bytes"
+		...
+	}
+}
+
 #ratioChart: {
 	kind: "TimeSeriesChart"
 	spec: {
@@ -70,7 +70,6 @@ import (
 	}
 }
 
-// Line chart for absolute rates (packets/s, frames/s).
 #rateChart: {
 	kind: "TimeSeriesChart"
 	spec: {
@@ -100,8 +99,7 @@ import (
 // MEMORY — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-_wk: "{node=~\"$node\"}"
-_sy: "{node=~\"$node\"}"
+_nf: "{node=~\"$node\"}"
 
 // Summary stats.
 #allocatable:         "sum(kube_node_status_allocatable{resource=\"memory\", node=~\"$node\"})"
@@ -110,9 +108,20 @@ _sy: "{node=~\"$node\"}"
 	- sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
 	"""
 #capacity:            "sum(kube_node_status_capacity{resource=\"memory\", node=~\"$node\"})"
-#workloadUtilization: "sum(node:memory:workloads_utilization:ratio" + _wk + ")"
-#systemUsed:          "sum(node:memory:system_used:bytes" + _sy + ")"
+#workloadUtilization: "sum(node:memory:workloads_utilization:ratio" + _nf + ")"
 #memoryPSI:           "node:memory:pressure:ratio{node=~\"$node\"}"
+
+// Workload memory decomposition (kubepods.slice) — 4 stacked layers.
+#wkNonReclaimable: "node:memory:workloads_non_reclaimable:bytes" + _nf
+#wkOverhead:       "node:memory:workloads_overhead:bytes" + _nf
+#wkHotReclaimable: "node:memory:workloads_hot_reclaimable:bytes" + _nf
+#wkCold:           "node:memory:workloads_cold:bytes" + _nf
+
+// System memory decomposition (system.slice) — 4 stacked layers.
+#sysNonReclaimable: "node:memory:system_non_reclaimable:bytes" + _nf
+#sysOverhead:       "node:memory:system_overhead:bytes" + _nf
+#sysHotReclaimable: "node:memory:system_hot_reclaimable:bytes" + _nf
+#sysCold:           "node:memory:system_cold:bytes" + _nf
 
 // ══════════════════════════════════════════════════════════════════════
 // CPU — PromQL fragments
@@ -120,6 +129,10 @@ _sy: "{node=~\"$node\"}"
 
 #cpuCapacity:    "sum(kube_node_status_capacity{resource=\"cpu\", node=~\"$node\"})"
 #cpuAllocatable: "sum(kube_node_status_allocatable{resource=\"cpu\", node=~\"$node\"})"
+#cpuReserved: """
+	sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
+	- sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+	"""
 #cpuUtilization: """
 	sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", node=~"$node"}[5m]))
 	/ sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
@@ -200,11 +213,13 @@ dashboardBuilder & {
 		#input: [
 
 			// ═══════════════════════════════════════════════════
-			// MEMORY — single compact row: stats + gauge + graphs
+			// MEMORY
 			// ═══════════════════════════════════════════════════
+
+			// ── Memory summary stats ─────────────────────────
 			{
 				#title:  "Memory"
-				#cols:   6
+				#cols:   5
 				#height: 8
 				#panels: [
 					// 1. Capacity (stat)
@@ -272,20 +287,7 @@ dashboardBuilder & {
 							}]
 						}
 					},
-					// 5. System used (time series graph)
-					panelBuilder & {
-						spec: {
-							display: {
-								name:        "System Used"
-								description: "system.slice total memory (can exceed reserved via file cache)"
-							}
-							plugin: #sparkBytes
-							queries: [
-								{#tsQuery & {#query: #systemUsed, #format: "{{node}}"}},
-							]
-						}
-					},
-					// 6. Memory Pressure (time series graph — PSI)
+					// 5. Memory Pressure (time series graph — PSI)
 					panelBuilder & {
 						spec: {
 							display: {
@@ -301,8 +303,73 @@ dashboardBuilder & {
 				]
 			},
 
+			// ── Memory decomposition charts ──────────────────
+			{
+				#title:  "Memory Decomposition"
+				#cols:   2
+				#height: 12
+				#panels: [
+					// Workload memory decomposition (kubepods.slice)
+					panelBuilder & {
+						spec: {
+							display: {
+								name:        "Workload Memory (kubepods.slice)"
+								description: "Non-reclaimable (RSS) + kernel overhead + hot-reclaimable (active file) + cold-reclaimable (inactive file). Allocatable threshold shown as dotted line."
+							}
+							plugin: #stackedAreaChart & {
+								spec: {
+									querySettings: [{
+										queryIndex:  4
+										colorMode:   "fixed-single"
+										colorValue:  "#FFFFFF"
+										lineStyle:   "dotted"
+										stack:       false
+										areaOpacity: 0
+									}]
+								}
+							}
+							queries: [
+								#tsQuery & {#query: #wkNonReclaimable, #format: "Non-reclaimable (RSS)"},
+								#tsQuery & {#query: #wkOverhead, #format: "Kernel overhead"},
+								#tsQuery & {#query: #wkHotReclaimable, #format: "Hot reclaimable (active file)"},
+								#tsQuery & {#query: #wkCold, #format: "Cold reclaimable (inactive file)"},
+								#tsQuery & {#query: #allocatable, #format: "── Allocatable"},
+							]
+						}
+					},
+					// System memory decomposition (system.slice)
+					panelBuilder & {
+						spec: {
+							display: {
+								name:        "System Memory (system.slice)"
+								description: "Non-reclaimable (RSS) + kernel overhead + hot-reclaimable (active file) + cold-reclaimable (inactive file). System reserved budget shown as dotted line."
+							}
+							plugin: #stackedAreaChart & {
+								spec: {
+									querySettings: [{
+										queryIndex:  4
+										colorMode:   "fixed-single"
+										colorValue:  "#FFFFFF"
+										lineStyle:   "dotted"
+										stack:       false
+										areaOpacity: 0
+									}]
+								}
+							}
+							queries: [
+								#tsQuery & {#query: #sysNonReclaimable, #format: "Non-reclaimable (RSS)"},
+								#tsQuery & {#query: #sysOverhead, #format: "Kernel overhead"},
+								#tsQuery & {#query: #sysHotReclaimable, #format: "Hot reclaimable (active file)"},
+								#tsQuery & {#query: #sysCold, #format: "Cold reclaimable (inactive file)"},
+								#tsQuery & {#query: #reserved, #format: "── System Reserved"},
+							]
+						}
+					},
+				]
+			},
+
 			// ═══════════════════════════════════════════════════
-			// CPU — single compact row: stats + gauge + graphs
+			// CPU
 			// ═══════════════════════════════════════════════════
 			{
 				#title:  "CPU"
@@ -355,16 +422,27 @@ dashboardBuilder & {
 							}]
 						}
 					},
-					// 4. System CPU used (time series graph)
+					// 4. System CPU used (time series graph + reserved line)
 					panelBuilder & {
 						spec: {
 							display: {
 								name:        "System Used"
-								description: "system.slice CPU usage (cores)"
+								description: "system.slice CPU usage (cores) vs system reserved budget (dotted line)"
 							}
-							plugin: #sparkCores
+							plugin: #sparkCores & {
+								spec: {
+									querySettings: [{
+										queryIndex:  1
+										colorMode:   "fixed-single"
+										colorValue:  "#FFFFFF"
+										lineStyle:   "dotted"
+										areaOpacity: 0
+									}]
+								}
+							}
 							queries: [
-								{#tsQuery & {#query: #cpuSystemUsed, #format: "{{node}}"}},
+								{#tsQuery & {#query: #cpuSystemUsed, #format: "System used"}},
+								{#tsQuery & {#query: #cpuReserved, #format: "── Reserved"}},
 							]
 						}
 					},

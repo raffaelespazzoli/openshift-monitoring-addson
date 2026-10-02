@@ -55,8 +55,10 @@ import (
 			mode:     "list"
 		}
 		visual: {
-			display: "bar"
-			stack:   "all"
+			display:     "line"
+			areaOpacity: 0.7
+			lineWidth:   2
+			stack:       "all"
 		}
 		yAxis: format: unit: #unit
 	}

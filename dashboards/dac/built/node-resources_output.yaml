@@ -151,33 +151,6 @@ spec:
       kind: Panel
       spec:
         display:
-          name: System Used
-          description: system.slice total memory (can exceed reserved via file cache)
-        plugin:
-          kind: TimeSeriesChart
-          spec:
-            legend:
-              position: bottom
-              mode: list
-            visual:
-              display: line
-              areaOpacity: 0.3
-              lineWidth: 1.5
-            yAxis:
-              format:
-                unit: bytes
-        queries:
-          - kind: TimeSeriesQuery
-            spec:
-              plugin:
-                kind: PrometheusTimeSeriesQuery
-                spec:
-                  query: sum(node:memory:system_used:bytes{node=~"$node"})
-                  seriesNameFormat: '{{node}}'
-    "0_5":
-      kind: Panel
-      spec:
-        display:
           name: Memory Pressure
           description: PSI — fraction of time processes stalled waiting for memory reclaim
         plugin:
@@ -205,6 +178,134 @@ spec:
       kind: Panel
       spec:
         display:
+          name: Workload Memory (kubepods.slice)
+          description: Non-reclaimable (RSS) + kernel overhead + hot-reclaimable (active file) + cold-reclaimable (inactive file). Allocatable threshold shown as dotted line.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            querySettings:
+              - queryIndex: 4
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                stack: false
+                areaOpacity: 0
+            visual:
+              display: line
+              areaOpacity: 0.7
+              stack: all
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:workloads_non_reclaimable:bytes{node=~"$node"}
+                  seriesNameFormat: Non-reclaimable (RSS)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:workloads_overhead:bytes{node=~"$node"}
+                  seriesNameFormat: Kernel overhead
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:workloads_hot_reclaimable:bytes{node=~"$node"}
+                  seriesNameFormat: Hot reclaimable (active file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:workloads_cold:bytes{node=~"$node"}
+                  seriesNameFormat: Cold reclaimable (inactive file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                  seriesNameFormat: ── Allocatable
+    "1_1":
+      kind: Panel
+      spec:
+        display:
+          name: System Memory (system.slice)
+          description: Non-reclaimable (RSS) + kernel overhead + hot-reclaimable (active file) + cold-reclaimable (inactive file). System reserved budget shown as dotted line.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            querySettings:
+              - queryIndex: 4
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                stack: false
+                areaOpacity: 0
+            visual:
+              display: line
+              areaOpacity: 0.7
+              stack: all
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:system_non_reclaimable:bytes{node=~"$node"}
+                  seriesNameFormat: Non-reclaimable (RSS)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:system_overhead:bytes{node=~"$node"}
+                  seriesNameFormat: Kernel overhead
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:system_hot_reclaimable:bytes{node=~"$node"}
+                  seriesNameFormat: Hot reclaimable (active file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: node:memory:system_cold:bytes{node=~"$node"}
+                  seriesNameFormat: Cold reclaimable (inactive file)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
+                    - sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                  seriesNameFormat: ── System Reserved
+    "2_0":
+      kind: Panel
+      spec:
+        display:
           name: Capacity
         plugin:
           kind: StatChart
@@ -220,7 +321,7 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
-    "1_1":
+    "2_1":
       kind: Panel
       spec:
         display:
@@ -239,7 +340,7 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
-    "1_2":
+    "2_2":
       kind: Panel
       spec:
         display:
@@ -269,18 +370,24 @@ spec:
                   query: |-
                     sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", node=~"$node"}[5m]))
                     / sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
-    "1_3":
+    "2_3":
       kind: Panel
       spec:
         display:
           name: System Used
-          description: system.slice CPU usage (cores)
+          description: system.slice CPU usage (cores) vs system reserved budget (dotted line)
         plugin:
           kind: TimeSeriesChart
           spec:
             legend:
               position: bottom
               mode: list
+            querySettings:
+              - queryIndex: 1
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                areaOpacity: 0
             visual:
               display: line
               areaOpacity: 0.3
@@ -295,8 +402,17 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: sum(rate(container_cpu_usage_seconds_total{id="/system.slice", node=~"$node"}[5m]))
-                  seriesNameFormat: '{{node}}'
-    "1_4":
+                  seriesNameFormat: System used
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
+                    - sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+                  seriesNameFormat: ── Reserved
+    "2_4":
       kind: Panel
       spec:
         display:
@@ -323,7 +439,7 @@ spec:
                 spec:
                   query: node:cpu:pressure:ratio{node=~"$node"}
                   seriesNameFormat: '{{node}}'
-    "2_0":
+    "3_0":
       kind: Panel
       spec:
         display:
@@ -357,7 +473,7 @@ spec:
                 spec:
                   query: node_nic:network:receive_utilization:ratio{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: RX {{device}}
-    "2_1":
+    "3_1":
       kind: Panel
       spec:
         display:
@@ -391,7 +507,7 @@ spec:
                 spec:
                   query: node_nic:network:error_rate:packets_per_second{instance=~"$node", device=~"$nic"}
                   seriesNameFormat: Errors {{device}}
-    "3_0":
+    "4_0":
       kind: Panel
       spec:
         display:
@@ -418,7 +534,7 @@ spec:
                 spec:
                   query: node:io:pressure_waiting:ratio{node=~"$node"}
                   seriesNameFormat: '{{node}}'
-    "3_1":
+    "4_1":
       kind: Panel
       spec:
         display:
@@ -445,7 +561,7 @@ spec:
                 spec:
                   query: node:io:pressure_stalled:ratio{node=~"$node"}
                   seriesNameFormat: '{{node}}'
-    "4_0":
+    "5_0":
       kind: Panel
       spec:
         display:
@@ -479,7 +595,7 @@ spec:
                 spec:
                   query: node_hba:fc:receive_utilization:ratio{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: RX {{fc_host}}
-    "4_1":
+    "5_1":
       kind: Panel
       spec:
         display:
@@ -513,7 +629,7 @@ spec:
                 spec:
                   query: node_hba:fc:link_loss_rate:per_second{instance=~"$node", fc_host=~"$hba"}
                   seriesNameFormat: Link loss {{fc_host}}
-    "5_0":
+    "6_0":
       kind: Panel
       spec:
         display:
@@ -533,7 +649,7 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: count(node_dmmultipath_device_active{instance=~"$node"})
-    "5_1":
+    "6_1":
       kind: Panel
       spec:
         display:
@@ -553,7 +669,7 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: sum(node_dmmultipath_device_paths{instance=~"$node"})
-    "5_2":
+    "6_2":
       kind: Panel
       spec:
         display:
@@ -615,12 +731,23 @@ spec:
             height: 8
             content:
               $ref: '#/spec/panels/0_4'
-          - x: 20
+    - kind: Grid
+      spec:
+        display:
+          title: Memory Decomposition
+        items:
+          - x: 0
             "y": 0
-            width: 4
-            height: 8
+            width: 12
+            height: 12
             content:
-              $ref: '#/spec/panels/0_5'
+              $ref: '#/spec/panels/1_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 12
+            content:
+              $ref: '#/spec/panels/1_1'
     - kind: Grid
       spec:
         display:
@@ -631,52 +758,35 @@ spec:
             width: 4
             height: 8
             content:
-              $ref: '#/spec/panels/1_0'
+              $ref: '#/spec/panels/2_0'
           - x: 4
             "y": 0
             width: 4
             height: 8
             content:
-              $ref: '#/spec/panels/1_1'
+              $ref: '#/spec/panels/2_1'
           - x: 8
             "y": 0
             width: 4
             height: 8
             content:
-              $ref: '#/spec/panels/1_2'
+              $ref: '#/spec/panels/2_2'
           - x: 12
             "y": 0
             width: 4
             height: 8
             content:
-              $ref: '#/spec/panels/1_3'
+              $ref: '#/spec/panels/2_3'
           - x: 16
             "y": 0
             width: 4
             height: 8
             content:
-              $ref: '#/spec/panels/1_4'
+              $ref: '#/spec/panels/2_4'
     - kind: Grid
       spec:
         display:
           title: Networking
-        items:
-          - x: 0
-            "y": 0
-            width: 12
-            height: 10
-            content:
-              $ref: '#/spec/panels/2_0'
-          - x: 12
-            "y": 0
-            width: 12
-            height: 10
-            content:
-              $ref: '#/spec/panels/2_1'
-    - kind: Grid
-      spec:
-        display:
-          title: Storage — I/O Pressure
         items:
           - x: 0
             "y": 0
@@ -693,7 +803,7 @@ spec:
     - kind: Grid
       spec:
         display:
-          title: Storage — Fibre Channel
+          title: Storage — I/O Pressure
         items:
           - x: 0
             "y": 0
@@ -710,6 +820,23 @@ spec:
     - kind: Grid
       spec:
         display:
+          title: Storage — Fibre Channel
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/5_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/5_1'
+    - kind: Grid
+      spec:
+        display:
           title: Storage — Multipath Health
         items:
           - x: 0
@@ -717,17 +844,17 @@ spec:
             width: 8
             height: 8
             content:
-              $ref: '#/spec/panels/5_0'
+              $ref: '#/spec/panels/6_0'
           - x: 8
             "y": 0
             width: 8
             height: 8
             content:
-              $ref: '#/spec/panels/5_1'
+              $ref: '#/spec/panels/6_1'
           - x: 16
             "y": 0
             width: 8
             height: 8
             content:
-              $ref: '#/spec/panels/5_2'
+              $ref: '#/spec/panels/6_2'
   duration: 6h

@@ -190,7 +190,9 @@ spec:
               position: bottom
               mode: list
             visual:
-              display: bar
+              display: line
+              areaOpacity: 0.7
+              lineWidth: 2
               stack: all
             yAxis:
               format:
@@ -229,7 +231,9 @@ spec:
               position: bottom
               mode: list
             visual:
-              display: bar
+              display: line
+              areaOpacity: 0.7
+              lineWidth: 2
               stack: all
             yAxis:
               format:
