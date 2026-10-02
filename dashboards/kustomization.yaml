@@ -12,8 +12,8 @@ resources:
   - dac/built/capacity-exhaustion_output.yaml
   - dac/built/vm-overcommit_output.yaml
   - dac/built/node-resources_output.yaml
-  - dac/built/pod-memory_output.yaml
-  - dac/built/vm-memory_output.yaml
+  - dac/built/pod-resources_output.yaml
+  - dac/built/vm-resources_output.yaml
 
 patches:
   # percli emits ListVariable defaultValue as {singleValue, sliceValues}.

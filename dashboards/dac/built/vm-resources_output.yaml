@@ -1,0 +1,544 @@
+kind: Dashboard
+metadata:
+  name: vm-resources
+  createdAt: "0001-01-01T00:00:00Z"
+  project: perses
+  updatedAt: "0001-01-01T00:00:00Z"
+  version: 0
+spec:
+  display:
+    name: VM Resources
+    description: 'Per-VM resource overview: guest memory decomposition, vCPU usage & scheduling delay, network throughput, and storage I/O latency.'
+  variables:
+    - kind: ListVariable
+      spec:
+        display:
+          name: Namespace
+          hidden: false
+        name: namespace
+        allowAllValue: false
+        allowMultiple: false
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+            labelName: namespace
+            matchers:
+              - kubevirt_vmi_memory_available_bytes{}
+    - kind: ListVariable
+      spec:
+        display:
+          name: VM
+          hidden: false
+        name: vm
+        allowAllValue: false
+        allowMultiple: false
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+            labelName: name
+            matchers:
+              - kubevirt_vmi_memory_available_bytes{namespace=~"$namespace"}
+  panels:
+    "0_0":
+      kind: Panel
+      spec:
+        display:
+          name: Domain
+          description: Total memory allocated to the QEMU domain — the VM's configured size.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: bytes
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_domain_bytes{name=~"$vm", namespace=~"$namespace"}
+    "0_1":
+      kind: Panel
+      spec:
+        display:
+          name: Available (MemTotal)
+          description: Usable memory inside the guest — domain minus kernel reserved.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: bytes
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_available_bytes{name=~"$vm", namespace=~"$namespace"}
+    "0_2":
+      kind: Panel
+      spec:
+        display:
+          name: Used (non-reclaimable)
+          description: Memory actively in use — cannot be freed without swap or OOM.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: bytes
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_used_bytes{name=~"$vm", namespace=~"$namespace"}
+    "0_3":
+      kind: Panel
+      spec:
+        display:
+          name: Utilization
+          description: used / available — how close to guest OOM.
+        plugin:
+          kind: GaugeChart
+          spec:
+            calculation: last-number
+            format:
+              unit: percent
+              decimalPlaces: 1
+            thresholds:
+              steps:
+                - value: 0
+                  color: '#32ac2d'
+                - value: 0.80
+                  color: '#ed8128'
+                - value: 0.95
+                  color: '#f53636'
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    kubevirt_vmi_memory_used_bytes{name=~"$vm", namespace=~"$namespace"}
+                    / kubevirt_vmi_memory_available_bytes{name=~"$vm", namespace=~"$namespace"}
+    "1_0":
+      kind: Panel
+      spec:
+        display:
+          name: Guest Memory Decomposition
+          description: 'Four layers summing to domain: kernel reserved + non-reclaimable + reclaimable + free.'
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.7
+              lineWidth: 2
+              stack: all
+            querySettings:
+              - queryIndex: 4
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                stack: false
+                areaOpacity: 0
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    kubevirt_vmi_memory_domain_bytes{name=~"$vm", namespace=~"$namespace"}
+                    - kubevirt_vmi_memory_available_bytes{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Kernel reserved
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_used_bytes{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Non-reclaimable (used)
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_usable_bytes{name=~"$vm", namespace=~"$namespace"} - kubevirt_vmi_memory_unused_bytes{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Reclaimable
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_unused_bytes{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Free
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_domain_bytes{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: ── Domain (configured)
+    "1_1":
+      kind: Panel
+      spec:
+        display:
+          name: 'Launcher Overhead: Estimated vs Actual'
+          description: Estimated = virt-controller prediction. Actual = pod working_set minus guest RSS. When actual exceeds estimated, the overhead budget is too tight.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            querySettings:
+              - queryIndex: 0
+                colorMode: fixed-single
+                colorValue: '#32ac2d'
+                lineStyle: dotted
+              - queryIndex: 1
+                colorMode: fixed-single
+                colorValue: '#2E79B5'
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: bytes
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_launcher_memory_overhead_bytes{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Estimated overhead
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: vmi:capacity:launcher_overhead_memory:bytes{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Actual overhead
+    "2_0":
+      kind: Panel
+      spec:
+        display:
+          name: vCPU Usage
+          description: Actual CPU consumption (cores).
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 2
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(kubevirt_vmi_cpu_usage_seconds_total{name=~"$vm", namespace=~"$namespace"}[5m]))
+    "2_1":
+      kind: Panel
+      spec:
+        display:
+          name: vCPU Count
+          description: Number of virtual CPUs assigned to the VM.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 0
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: count(kubevirt_vmi_vcpu_delay_seconds_total{name=~"$vm", namespace=~"$namespace"}) or vector(0)
+    "2_2":
+      kind: Panel
+      spec:
+        display:
+          name: vCPU Scheduling Delay
+          description: Time vCPUs spend in the host scheduler queue — how much CPU the VM wants but cannot get.
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 3
+            thresholds:
+              steps:
+                - value: 0
+                  color: '#32ac2d'
+                - value: 0.1
+                  color: '#ed8128'
+                - value: 0.5
+                  color: '#f53636'
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: vmi:cpu:vcpu_delay:ratio{name=~"$vm", namespace=~"$namespace"}
+    "3_0":
+      kind: Panel
+      spec:
+        display:
+          name: Throughput
+          description: Network receive and transmit rate across all VM interfaces.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: bytes/sec
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(kubevirt_vmi_network_receive_bytes_total{name=~"$vm", namespace=~"$namespace"}[5m]))
+                  seriesNameFormat: RX
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(kubevirt_vmi_network_transmit_bytes_total{name=~"$vm", namespace=~"$namespace"}[5m]))
+                  seriesNameFormat: TX
+    "3_1":
+      kind: Panel
+      spec:
+        display:
+          name: Drops & Errors
+          description: Network packet drops and errors. Normal value is 0.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: decimal
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: vmi:network:drop_rate:packets_per_second{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Drops
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: vmi:network:error_rate:packets_per_second{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Errors
+    "4_0":
+      kind: Panel
+      spec:
+        display:
+          name: I/O Latency
+          description: Storage read and write latency (seconds per operation). Higher latency = storage saturation.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: seconds
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: vmi:io:read_latency:seconds{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Read latency
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: vmi:io:write_latency:seconds{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Write latency
+    "4_1":
+      kind: Panel
+      spec:
+        display:
+          name: I/O Throughput
+          description: Total storage throughput (read + write) across all drives.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: bytes/sec
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: vmi:io:throughput:bytes_per_second{name=~"$vm", namespace=~"$namespace"}
+                  seriesNameFormat: Throughput
+  layouts:
+    - kind: Grid
+      spec:
+        display:
+          title: Memory
+        items:
+          - x: 0
+            "y": 0
+            width: 6
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_0'
+          - x: 6
+            "y": 0
+            width: 6
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_1'
+          - x: 12
+            "y": 0
+            width: 6
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_2'
+          - x: 18
+            "y": 0
+            width: 6
+            height: 8
+            content:
+              $ref: '#/spec/panels/0_3'
+    - kind: Grid
+      spec:
+        display:
+          title: Memory Decomposition & Launcher Overhead
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 12
+            content:
+              $ref: '#/spec/panels/1_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 12
+            content:
+              $ref: '#/spec/panels/1_1'
+    - kind: Grid
+      spec:
+        display:
+          title: CPU
+        items:
+          - x: 0
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_0'
+          - x: 8
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_1'
+          - x: 16
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_2'
+    - kind: Grid
+      spec:
+        display:
+          title: Network
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/3_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/3_1'
+    - kind: Grid
+      spec:
+        display:
+          title: Storage
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/4_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/4_1'
+  duration: 6h

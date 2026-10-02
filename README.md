@@ -172,14 +172,14 @@ Node-level memory decomposition, memory pressure (PSI), and OOM proximity detect
 
 | Dashboard | Description |
 |-----------|-------------|
-| **Node Memory** | Runtime memory decomposition per node: non-reclaimable, hot-reclaimable, cold-reclaimable, kernel overhead, and free. Three stacked area charts: full node, workloads (kubepods.slice), and system (system.slice). |
-| **Pod Memory** | Container-level memory decomposition with limit threshold line. Summary stats: working set, limit, utilization, RSS. |
-| **VM Memory** | Guest memory decomposition (kernel reserved, non-reclaimable, reclaimable, free) and launcher overhead: estimated vs actual. |
+| **Node Resources** (`node-resources`) | Per-node resource overview: memory summary & decomposition, CPU summary & PSI, networking NIC utilization, storage I/O pressure, Fibre Channel, and DM-Multipath. |
+| **Pod Resources** (`pod-resources`) | Per-pod/container resource overview: memory decomposition with limit threshold, CPU utilization, network throughput & drops/errors, and storage I/O pressure (PSI). |
+| **VM Resources** (`vm-resources`) | Per-VM resource overview: guest memory decomposition & launcher overhead, vCPU usage & scheduling delay, network throughput & drops/errors, and storage I/O latency & throughput. |
 
 <!-- Dashboard screenshots — add images to docs/images/ and uncomment:
-![Node Memory](docs/images/node-memory.png)
-![Pod Memory](docs/images/pod-memory.png)
-![VM Memory](docs/images/vm-memory.png)
+![Node Resources](docs/images/node-resources.png)
+![Pod Resources](docs/images/pod-resources.png)
+![VM Resources](docs/images/vm-resources.png)
 -->
 
 ---
@@ -402,9 +402,9 @@ cue mod tidy
 percli dac build -f vm-capacity.cue
 percli dac build -f capacity-exhaustion.cue
 percli dac build -f vm-overcommit.cue
-percli dac build -f node-memory.cue
-percli dac build -f pod-memory.cue
-percli dac build -f vm-memory.cue
+percli dac build -f node-resources.cue
+percli dac build -f pod-resources.cue
+percli dac build -f vm-resources.cue
 
 # Fix defaultValue format (percli emits an object; Perses expects a string)
 cd built

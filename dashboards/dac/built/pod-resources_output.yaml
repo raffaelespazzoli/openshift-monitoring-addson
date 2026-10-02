@@ -1,14 +1,14 @@
 kind: Dashboard
 metadata:
-  name: pod-memory
+  name: pod-resources
   createdAt: "0001-01-01T00:00:00Z"
   project: perses
   updatedAt: "0001-01-01T00:00:00Z"
   version: 0
 spec:
   display:
-    name: Pod Memory
-    description: 'Container memory decomposition: non-reclaimable, hot/cold reclaimable, kernel overhead, with limit threshold.'
+    name: Pod Resources
+    description: 'Pod/container resource overview: memory decomposition, CPU utilization, network throughput, and I/O pressure.'
   variables:
     - kind: ListVariable
       spec:
@@ -105,7 +105,7 @@ spec:
           name: Utilization
           description: working_set / limit — how close to OOM
         plugin:
-          kind: StatChart
+          kind: GaugeChart
           spec:
             calculation: last-number
             format:
@@ -222,11 +222,203 @@ spec:
                 spec:
                   query: sum(kube_pod_container_resource_limits{resource="memory", namespace=~"$namespace", pod=~"$pod", container=~"$container"})
                   seriesNameFormat: ── Memory Limit
+    "2_0":
+      kind: Panel
+      spec:
+        display:
+          name: CPU Usage
+          description: Actual CPU consumption (cores).
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 2
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(container_cpu_usage_seconds_total{namespace=~"$namespace", pod=~"$pod", container=~"$container", container!="POD", container!=""}[5m]))
+    "2_1":
+      kind: Panel
+      spec:
+        display:
+          name: CPU Limit
+        plugin:
+          kind: StatChart
+          spec:
+            calculation: last-number
+            format:
+              unit: decimal
+              decimalPlaces: 1
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(kube_pod_container_resource_limits{resource="cpu", namespace=~"$namespace", pod=~"$pod", container=~"$container"})
+    "2_2":
+      kind: Panel
+      spec:
+        display:
+          name: CPU Utilization
+          description: CPU usage / limit
+        plugin:
+          kind: GaugeChart
+          spec:
+            calculation: last-number
+            format:
+              unit: percent
+              decimalPlaces: 1
+            thresholds:
+              steps:
+                - value: 0
+                  color: '#32ac2d'
+                - value: 0.80
+                  color: '#ed8128'
+                - value: 0.95
+                  color: '#f53636'
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: |-
+                    sum(rate(container_cpu_usage_seconds_total{namespace=~"$namespace", pod=~"$pod", container=~"$container", container!="POD", container!=""}[5m]))
+                    /
+                    sum(kube_pod_container_resource_limits{resource="cpu", namespace=~"$namespace", pod=~"$pod", container=~"$container"})
+    "3_0":
+      kind: Panel
+      spec:
+        display:
+          name: Throughput
+          description: Network receive and transmit rate (excluding loopback).
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: bytes/sec
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(container_network_receive_bytes_total{namespace=~"$namespace", pod=~"$pod", interface!="lo"}[5m]))
+                  seriesNameFormat: RX
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(container_network_transmit_bytes_total{namespace=~"$namespace", pod=~"$pod", interface!="lo"}[5m]))
+                  seriesNameFormat: TX
+    "3_1":
+      kind: Panel
+      spec:
+        display:
+          name: Drops & Errors
+          description: Network packet drops and errors. Normal value is 0.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: decimal
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(container_network_receive_packets_dropped_total{namespace=~"$namespace", pod=~"$pod"}[5m])) + sum(rate(container_network_transmit_packets_dropped_total{namespace=~"$namespace", pod=~"$pod"}[5m]))
+                  seriesNameFormat: Drops
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(container_network_receive_errors_total{namespace=~"$namespace", pod=~"$pod"}[5m])) + sum(rate(container_network_transmit_errors_total{namespace=~"$namespace", pod=~"$pod"}[5m]))
+                  seriesNameFormat: Errors
+    "4_0":
+      kind: Panel
+      spec:
+        display:
+          name: I/O Pressure — Waiting (some)
+          description: Fraction of wall-clock time at least one task in this pod was stalled on block I/O. Requires cgroupv2.
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: pod:io:pressure_waiting:ratio{namespace=~"$namespace", pod=~"$pod"}
+                  seriesNameFormat: '{{pod}}'
+    "4_1":
+      kind: Panel
+      spec:
+        display:
+          name: I/O Pressure — Stalled (full)
+          description: Fraction of wall-clock time ALL tasks in this pod were stalled on I/O (zero progress).
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            visual:
+              display: line
+              areaOpacity: 0
+              lineWidth: 2
+            yAxis:
+              format:
+                unit: percent
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: pod:io:pressure_stalled:ratio{namespace=~"$namespace", pod=~"$pod"}
+                  seriesNameFormat: '{{pod}}'
   layouts:
     - kind: Grid
       spec:
         display:
-          title: Summary
+          title: Memory
         items:
           - x: 0
             "y": 0
@@ -260,7 +452,64 @@ spec:
           - x: 0
             "y": 0
             width: 24
-            height: 16
+            height: 12
             content:
               $ref: '#/spec/panels/1_0'
+    - kind: Grid
+      spec:
+        display:
+          title: CPU
+        items:
+          - x: 0
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_0'
+          - x: 8
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_1'
+          - x: 16
+            "y": 0
+            width: 8
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_2'
+    - kind: Grid
+      spec:
+        display:
+          title: Network
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/3_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/3_1'
+    - kind: Grid
+      spec:
+        display:
+          title: Storage
+        items:
+          - x: 0
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/4_0'
+          - x: 12
+            "y": 0
+            width: 12
+            height: 10
+            content:
+              $ref: '#/spec/panels/4_1'
   duration: 6h
