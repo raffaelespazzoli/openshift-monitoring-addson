@@ -108,8 +108,8 @@ _nf: "{node=~\"^$node$\"}"
 	- sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
 	"""
 #capacity:            "sum(kube_node_status_capacity{resource=\"memory\", node=~\"^$node$\"})"
-#workloadUtilization: "sum(container_memory_working_set_bytes{id=\"/kubepods.slice\", node=~\"^$node$\"}) / sum(kube_node_status_allocatable{resource=\"memory\", node=~\"^$node$\"})"
-#memoryPSI:           "node:memory:pressure:ratio{node=~\"^$node$\"}"
+#workloadUtilization: "node:memory:workloads_utilization:ratio" + _nf
+#memoryPSI:           "node:memory:pressure:ratio" + _nf
 
 // Workload memory decomposition (kubepods.slice) — 4 stacked layers.
 #wkNonReclaimable: "node:memory:workloads_non_reclaimable:bytes" + _nf
@@ -138,7 +138,7 @@ _nf: "{node=~\"^$node$\"}"
 	/ sum(kube_node_status_allocatable{resource="cpu", node=~"^$node$"})
 	"""
 #cpuSystemUsed: "sum(rate(container_cpu_usage_seconds_total{id=\"/system.slice\", cpu=\"total\", node=~\"^$node$\"}[5m]))"
-#cpuPSI:        "node:cpu:pressure:ratio{node=~\"^$node$\"}"
+#cpuPSI:        "node:cpu:pressure:ratio" + _nf
 
 // ══════════════════════════════════════════════════════════════════════
 // NETWORKING — PromQL fragments
@@ -154,8 +154,8 @@ _netFilter: "{instance=~\"^$node$\", device=~\"^$nic$\"}"
 // STORAGE — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-#ioPSIWaiting: "node:io:pressure_waiting:ratio{node=~\"^$node$\"}"
-#ioPSIStalled: "node:io:pressure_stalled:ratio{node=~\"^$node$\"}"
+#ioPSIWaiting: "node:io:pressure_waiting:ratio" + _nf
+#ioPSIStalled: "node:io:pressure_stalled:ratio" + _nf
 
 _fcFilter: "{instance=~\"^$node$\", fc_host=~\"^$hba$\"}"
 #fcTxUtil:   "node_hba:fc:transmit_utilization:ratio" + _fcFilter

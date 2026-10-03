@@ -41,7 +41,23 @@ spec:
               kind: PrometheusDatasource
             labelName: name
             matchers:
-              - kubevirt_vmi_memory_available_bytes{namespace=~"$namespace"}
+              - kubevirt_vmi_memory_available_bytes{namespace=~"^$namespace$"}
+    - kind: ListVariable
+      spec:
+        display:
+          name: Drive
+          hidden: false
+        name: drive
+        allowAllValue: true
+        allowMultiple: false
+        plugin:
+          kind: PrometheusLabelValuesVariable
+          spec:
+            datasource:
+              kind: PrometheusDatasource
+            labelName: drive
+            matchers:
+              - vmi_disk:io:read_latency:seconds{namespace=~"^$namespace$", name=~"^$vm$"}
   panels:
     "0_0":
       kind: Panel
@@ -62,7 +78,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_memory_domain_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_memory_domain_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
     "0_1":
       kind: Panel
       spec:
@@ -82,7 +98,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_memory_available_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_memory_available_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
     "0_2":
       kind: Panel
       spec:
@@ -102,7 +118,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_memory_used_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_memory_used_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
     "0_3":
       kind: Panel
       spec:
@@ -131,8 +147,9 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    kubevirt_vmi_memory_used_bytes{name=~"$vm", namespace=~"$namespace"}
-                    / kubevirt_vmi_memory_available_bytes{name=~"$vm", namespace=~"$namespace"}
+                    kubevirt_vmi_memory_used_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
+                    / kubevirt_vmi_memory_available_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
+                  seriesNameFormat: '{{name}}'
     "1_0":
       kind: Panel
       spec:
@@ -167,36 +184,36 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    kubevirt_vmi_memory_domain_bytes{name=~"$vm", namespace=~"$namespace"}
-                    - kubevirt_vmi_memory_available_bytes{name=~"$vm", namespace=~"$namespace"}
+                    kubevirt_vmi_memory_domain_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
+                    - kubevirt_vmi_memory_available_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Kernel reserved
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_memory_used_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_memory_used_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Non-reclaimable (used)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_memory_usable_bytes{name=~"$vm", namespace=~"$namespace"} - kubevirt_vmi_memory_unused_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_memory_usable_bytes{name=~"^$vm$", namespace=~"^$namespace$"} - kubevirt_vmi_memory_unused_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Reclaimable
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_memory_unused_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_memory_unused_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Free
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_memory_domain_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_memory_domain_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: ── Domain (configured)
     "1_1":
       kind: Panel
@@ -231,14 +248,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: kubevirt_vmi_launcher_memory_overhead_bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: kubevirt_vmi_launcher_memory_overhead_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Estimated overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:capacity:launcher_overhead_memory:bytes{name=~"$vm", namespace=~"$namespace"}
+                  query: vmi:capacity:launcher_overhead_memory:bytes{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Actual overhead
     "2_0":
       kind: Panel
@@ -259,7 +276,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(rate(kubevirt_vmi_cpu_usage_seconds_total{name=~"$vm", namespace=~"$namespace"}[5m]))
+                  query: sum(rate(kubevirt_vmi_cpu_usage_seconds_total{name=~"^$vm$", namespace=~"^$namespace$"}[5m]))
     "2_1":
       kind: Panel
       spec:
@@ -279,7 +296,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: count(kubevirt_vmi_vcpu_delay_seconds_total{name=~"$vm", namespace=~"$namespace"}) or vector(0)
+                  query: count(kubevirt_vmi_vcpu_delay_seconds_total{name=~"^$vm$", namespace=~"^$namespace$"}) or vector(0)
     "2_2":
       kind: Panel
       spec:
@@ -307,7 +324,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:cpu:vcpu_delay:ratio{name=~"$vm", namespace=~"$namespace"}
+                  query: vmi:cpu:vcpu_delay:ratio{name=~"^$vm$", namespace=~"^$namespace$"}
     "3_0":
       kind: Panel
       spec:
@@ -333,14 +350,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(rate(kubevirt_vmi_network_receive_bytes_total{name=~"$vm", namespace=~"$namespace"}[5m]))
+                  query: sum(rate(kubevirt_vmi_network_receive_bytes_total{name=~"^$vm$", namespace=~"^$namespace$"}[5m]))
                   seriesNameFormat: RX
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(rate(kubevirt_vmi_network_transmit_bytes_total{name=~"$vm", namespace=~"$namespace"}[5m]))
+                  query: sum(rate(kubevirt_vmi_network_transmit_bytes_total{name=~"^$vm$", namespace=~"^$namespace$"}[5m]))
                   seriesNameFormat: TX
     "3_1":
       kind: Panel
@@ -367,14 +384,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:network:drop_rate:packets_per_second{name=~"$vm", namespace=~"$namespace"}
+                  query: vmi:network:drop_rate:packets_per_second{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Drops
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:network:error_rate:packets_per_second{name=~"$vm", namespace=~"$namespace"}
+                  query: vmi:network:error_rate:packets_per_second{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Errors
     "4_0":
       kind: Panel
@@ -401,15 +418,15 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:io:read_latency:seconds{name=~"$vm", namespace=~"$namespace"}
-                  seriesNameFormat: Read latency
+                  query: vmi_disk:io:read_latency:seconds{name=~"^$vm$", namespace=~"^$namespace$", drive=~"^$drive$"}
+                  seriesNameFormat: Read {{drive}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:io:write_latency:seconds{name=~"$vm", namespace=~"$namespace"}
-                  seriesNameFormat: Write latency
+                  query: vmi_disk:io:write_latency:seconds{name=~"^$vm$", namespace=~"^$namespace$", drive=~"^$drive$"}
+                  seriesNameFormat: Write {{drive}}
     "4_1":
       kind: Panel
       spec:
@@ -435,7 +452,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: vmi:io:throughput:bytes_per_second{name=~"$vm", namespace=~"$namespace"}
+                  query: vmi:io:throughput:bytes_per_second{name=~"^$vm$", namespace=~"^$namespace$"}
                   seriesNameFormat: Throughput
   layouts:
     - kind: Grid

@@ -101,6 +101,7 @@ spec:
       spec:
         display:
           name: VMs that fit
+          description: 'How many more VMs of the selected shape fit. Floored at 0. Note: virt-launcher overhead (~500 MiB/VM) is not subtracted from available memory.'
         plugin:
           kind: StatChart
           spec:
@@ -115,10 +116,13 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    floor(clamp_max(
-                      cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit,
-                      scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
-                    ))
+                    clamp_min(
+                      floor(clamp_max(
+                        cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit,
+                        scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
+                      )),
+                      0
+                    )
     "0_1":
       kind: Panel
       spec:

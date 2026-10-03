@@ -41,7 +41,7 @@ spec:
               kind: PrometheusDatasource
             labelName: device
             matchers:
-              - node_nic:network:transmit_utilization:ratio{instance=~"$node"}
+              - node_nic:network:transmit_utilization:ratio{instance=~"^$node$"}
     - kind: ListVariable
       spec:
         display:
@@ -57,7 +57,7 @@ spec:
               kind: PrometheusDatasource
             labelName: fc_host
             matchers:
-              - node_hba:fc:transmit_utilization:ratio{instance=~"$node"}
+              - node_hba:fc:transmit_utilization:ratio{instance=~"^$node$"}
   panels:
     "0_0":
       kind: Panel
@@ -77,7 +77,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(kube_node_status_capacity{resource="memory", node=~"$node"})
+                  query: sum(kube_node_status_capacity{resource="memory", node=~"^$node$"})
     "0_1":
       kind: Panel
       spec:
@@ -96,7 +96,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                  query: sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
     "0_2":
       kind: Panel
       spec:
@@ -124,7 +124,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(node:memory:workloads_utilization:ratio{node=~"$node"})
+                  query: node:memory:workloads_utilization:ratio{node=~"^$node$"}
     "0_3":
       kind: Panel
       spec:
@@ -145,8 +145,8 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-                    - sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                    sum(kube_node_status_capacity{resource="memory", node=~"^$node$"})
+                    - sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
     "0_4":
       kind: Panel
       spec:
@@ -172,7 +172,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:pressure:ratio{node=~"$node"}
+                  query: node:memory:pressure:ratio{node=~"^$node$"}
                   seriesNameFormat: '{{node}}'
     "1_0":
       kind: Panel
@@ -207,35 +207,35 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_non_reclaimable:bytes{node=~"$node"}
+                  query: node:memory:workloads_non_reclaimable:bytes{node=~"^$node$"}
                   seriesNameFormat: Non-reclaimable (RSS)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_overhead:bytes{node=~"$node"}
+                  query: node:memory:workloads_overhead:bytes{node=~"^$node$"}
                   seriesNameFormat: Kernel overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_hot_reclaimable:bytes{node=~"$node"}
+                  query: node:memory:workloads_hot_reclaimable:bytes{node=~"^$node$"}
                   seriesNameFormat: Hot reclaimable (active file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_cold:bytes{node=~"$node"}
+                  query: node:memory:workloads_cold:bytes{node=~"^$node$"}
                   seriesNameFormat: Cold reclaimable (inactive file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                  query: sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
                   seriesNameFormat: ── Allocatable
     "1_1":
       kind: Panel
@@ -270,28 +270,28 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_non_reclaimable:bytes{node=~"$node"}
+                  query: node:memory:system_non_reclaimable:bytes{node=~"^$node$"}
                   seriesNameFormat: Non-reclaimable (RSS)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_overhead:bytes{node=~"$node"}
+                  query: node:memory:system_overhead:bytes{node=~"^$node$"}
                   seriesNameFormat: Kernel overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_hot_reclaimable:bytes{node=~"$node"}
+                  query: node:memory:system_hot_reclaimable:bytes{node=~"^$node$"}
                   seriesNameFormat: Hot reclaimable (active file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_cold:bytes{node=~"$node"}
+                  query: node:memory:system_cold:bytes{node=~"^$node$"}
                   seriesNameFormat: Cold reclaimable (inactive file)
           - kind: TimeSeriesQuery
             spec:
@@ -299,8 +299,8 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-                    - sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+                    sum(kube_node_status_capacity{resource="memory", node=~"^$node$"})
+                    - sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
                   seriesNameFormat: ── System Reserved
     "2_0":
       kind: Panel
@@ -320,7 +320,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
+                  query: sum(kube_node_status_capacity{resource="cpu", node=~"^$node$"})
     "2_1":
       kind: Panel
       spec:
@@ -339,7 +339,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+                  query: sum(kube_node_status_allocatable{resource="cpu", node=~"^$node$"})
     "2_2":
       kind: Panel
       spec:
@@ -368,8 +368,8 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", node=~"$node"}[5m]))
-                    / sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+                    sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", cpu="total", node=~"^$node$"}[5m]))
+                    / sum(kube_node_status_allocatable{resource="cpu", node=~"^$node$"})
     "2_3":
       kind: Panel
       spec:
@@ -401,7 +401,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(rate(container_cpu_usage_seconds_total{id="/system.slice", node=~"$node"}[5m]))
+                  query: sum(rate(container_cpu_usage_seconds_total{id="/system.slice", cpu="total", node=~"^$node$"}[5m]))
                   seriesNameFormat: System used
           - kind: TimeSeriesQuery
             spec:
@@ -409,8 +409,8 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: |-
-                    sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
-                    - sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+                    sum(kube_node_status_capacity{resource="cpu", node=~"^$node$"})
+                    - sum(kube_node_status_allocatable{resource="cpu", node=~"^$node$"})
                   seriesNameFormat: ── Reserved
     "2_4":
       kind: Panel
@@ -437,7 +437,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:cpu:pressure:ratio{node=~"$node"}
+                  query: node:cpu:pressure:ratio{node=~"^$node$"}
                   seriesNameFormat: '{{node}}'
     "3_0":
       kind: Panel
@@ -464,14 +464,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:transmit_utilization:ratio{instance=~"$node", device=~"$nic"}
+                  query: node_nic:network:transmit_utilization:ratio{instance=~"^$node$", device=~"^$nic$"}
                   seriesNameFormat: TX {{device}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:receive_utilization:ratio{instance=~"$node", device=~"$nic"}
+                  query: node_nic:network:receive_utilization:ratio{instance=~"^$node$", device=~"^$nic$"}
                   seriesNameFormat: RX {{device}}
     "3_1":
       kind: Panel
@@ -498,14 +498,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:drop_rate:packets_per_second{instance=~"$node", device=~"$nic"}
+                  query: node_nic:network:drop_rate:packets_per_second{instance=~"^$node$", device=~"^$nic$"}
                   seriesNameFormat: Drops {{device}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:error_rate:packets_per_second{instance=~"$node", device=~"$nic"}
+                  query: node_nic:network:error_rate:packets_per_second{instance=~"^$node$", device=~"^$nic$"}
                   seriesNameFormat: Errors {{device}}
     "4_0":
       kind: Panel
@@ -532,7 +532,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:io:pressure_waiting:ratio{node=~"$node"}
+                  query: node:io:pressure_waiting:ratio{node=~"^$node$"}
                   seriesNameFormat: '{{node}}'
     "4_1":
       kind: Panel
@@ -559,7 +559,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:io:pressure_stalled:ratio{node=~"$node"}
+                  query: node:io:pressure_stalled:ratio{node=~"^$node$"}
                   seriesNameFormat: '{{node}}'
     "5_0":
       kind: Panel
@@ -586,14 +586,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:transmit_utilization:ratio{instance=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:transmit_utilization:ratio{instance=~"^$node$", fc_host=~"^$hba$"}
                   seriesNameFormat: TX {{fc_host}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:receive_utilization:ratio{instance=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:receive_utilization:ratio{instance=~"^$node$", fc_host=~"^$hba$"}
                   seriesNameFormat: RX {{fc_host}}
     "5_1":
       kind: Panel
@@ -620,14 +620,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:error_rate:frames_per_second{instance=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:error_rate:frames_per_second{instance=~"^$node$", fc_host=~"^$hba$"}
                   seriesNameFormat: Errors {{fc_host}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:link_loss_rate:per_second{instance=~"$node", fc_host=~"$hba"}
+                  query: node_hba:fc:link_loss_rate:per_second{instance=~"^$node$", fc_host=~"^$hba$"}
                   seriesNameFormat: Link loss {{fc_host}}
     "6_0":
       kind: Panel
@@ -648,7 +648,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: count(node_dmmultipath_device_active{instance=~"$node"})
+                  query: count(node_dmmultipath_device_active{instance=~"^$node$"})
     "6_1":
       kind: Panel
       spec:
@@ -668,7 +668,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(node_dmmultipath_device_paths{instance=~"$node"})
+                  query: sum(node_dmmultipath_device_paths{instance=~"^$node$"})
     "6_2":
       kind: Panel
       spec:
@@ -694,7 +694,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: sum(node_dmmultipath_device_paths_failed{instance=~"$node"})
+                  query: sum(node_dmmultipath_device_paths_failed{instance=~"^$node$"})
   layouts:
     - kind: Grid
       spec:

@@ -261,10 +261,9 @@ dashboardBuilder & {
 								description: "used / available — how close to guest OOM."
 							}
 							plugin: #gaugeChart
-							queries: [{
-								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {spec: query: #memUtilization}
-							}]
+							queries: [
+								#tsQuery & {#query: #memUtilization, #format: "{{name}}"},
+							]
 						}
 					},
 				]

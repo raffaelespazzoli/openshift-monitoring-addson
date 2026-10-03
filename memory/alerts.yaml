@@ -211,6 +211,7 @@ spec:
               the next maintenance window.  Use `edac-util -s` or
               check `dmesg | grep EDAC` on the node to identify
               the affected DIMM slot.
+              Correctable errors in last hour: {{ $value | humanize }}.
 
         # CRITICAL: uncorrectable memory error — data corruption
         # has occurred.  The ECC hardware detected an error it

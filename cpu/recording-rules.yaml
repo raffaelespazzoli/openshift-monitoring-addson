@@ -80,5 +80,5 @@ spec:
             sum by (namespace, name, node) (
               rate(kubevirt_vmi_vcpu_delay_seconds_total[5m])
             )
-            / on (namespace, name) group_left()
+            / on (namespace, name, node)
             vmi:kubevirt_vmi_vcpu:count
