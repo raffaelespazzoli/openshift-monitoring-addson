@@ -74,6 +74,26 @@ import (
 	}
 }
 
+#sparkBytes: {
+	kind: "TimeSeriesChart"
+	spec: {
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
+		yAxis: format: unit: "bytes"
+		...
+	}
+}
+
+#sparkDecimal: {
+	kind: "TimeSeriesChart"
+	spec: {
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
+		yAxis: format: unit: "decimal"
+		...
+	}
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // Query helpers
 // ══════════════════════════════════════════════════════════════════════
@@ -257,12 +277,23 @@ dashboardBuilder & {
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Utilization"
-								description: "used / available — how close to guest OOM."
+								name:        "Usage"
+								description: "Guest memory used vs available capacity (dotted line)."
 							}
-							plugin: #gaugeChart
+							plugin: #sparkBytes & {
+								spec: {
+									querySettings: [{
+										queryIndex:  1
+										colorMode:   "fixed-single"
+										colorValue:  "#FFFFFF"
+										lineStyle:   "dotted"
+										areaOpacity: 0
+									}]
+								}
+							}
 							queries: [
-								#tsQuery & {#query: #memUtilization, #format: "{{name}}"},
+								{#tsQuery & {#query: #used, #format: "Used"}},
+								{#tsQuery & {#query: #available, #format: "── Available"}},
 							]
 						}
 					},
@@ -331,7 +362,7 @@ dashboardBuilder & {
 			// ═══════════════════════════════════════════════════
 			{
 				#title: "CPU"
-				#cols:  3
+				#cols:  4
 				#panels: [
 					panelBuilder & {
 						spec: {
@@ -390,6 +421,29 @@ dashboardBuilder & {
 								kind: "TimeSeriesQuery"
 								spec: plugin: promQuery & {spec: query: #vcpuDelay}
 							}]
+						}
+					},
+					panelBuilder & {
+						spec: {
+							display: {
+								name:        "Usage"
+								description: "vCPU usage vs vCPU count (dotted line)."
+							}
+							plugin: #sparkDecimal & {
+								spec: {
+									querySettings: [{
+										queryIndex:  1
+										colorMode:   "fixed-single"
+										colorValue:  "#FFFFFF"
+										lineStyle:   "dotted"
+										areaOpacity: 0
+									}]
+								}
+							}
+							queries: [
+								{#tsQuery & {#query: #cpuUsage, #format: "Usage"}},
+								{#tsQuery & {#query: #vcpuCount, #format: "── vCPUs"}},
+							]
 						}
 					},
 				]

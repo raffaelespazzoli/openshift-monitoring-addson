@@ -123,33 +123,42 @@ spec:
       kind: Panel
       spec:
         display:
-          name: Utilization
-          description: used / available — how close to guest OOM.
+          name: Usage
+          description: Guest memory used vs available capacity (dotted line).
         plugin:
-          kind: GaugeChart
+          kind: TimeSeriesChart
           spec:
-            calculation: last-number
-            format:
-              unit: percent
-              decimalPlaces: 1
-            thresholds:
-              steps:
-                - value: 0
-                  color: '#32ac2d'
-                - value: 0.80
-                  color: '#ed8128'
-                - value: 0.95
-                  color: '#f53636'
+            legend:
+              position: bottom
+              mode: list
+            querySettings:
+              - queryIndex: 1
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                areaOpacity: 0
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: bytes
         queries:
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: |-
-                    kubevirt_vmi_memory_used_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
-                    / kubevirt_vmi_memory_available_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
-                  seriesNameFormat: '{{name}}'
+                  query: kubevirt_vmi_memory_used_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
+                  seriesNameFormat: Used
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: kubevirt_vmi_memory_available_bytes{name=~"^$vm$", namespace=~"^$namespace$"}
+                  seriesNameFormat: ── Available
     "1_0":
       kind: Panel
       spec:
@@ -325,6 +334,46 @@ spec:
                 kind: PrometheusTimeSeriesQuery
                 spec:
                   query: vmi:cpu:vcpu_delay:ratio{name=~"^$vm$", namespace=~"^$namespace$"}
+    "2_3":
+      kind: Panel
+      spec:
+        display:
+          name: Usage
+          description: vCPU usage vs vCPU count (dotted line).
+        plugin:
+          kind: TimeSeriesChart
+          spec:
+            legend:
+              position: bottom
+              mode: list
+            querySettings:
+              - queryIndex: 1
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                areaOpacity: 0
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: decimal
+        queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(rate(kubevirt_vmi_cpu_usage_seconds_total{name=~"^$vm$", namespace=~"^$namespace$"}[5m]))
+                  seriesNameFormat: Usage
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: count(kubevirt_vmi_vcpu_delay_seconds_total{name=~"^$vm$", namespace=~"^$namespace$"}) or vector(0)
+                  seriesNameFormat: ── vCPUs
     "3_0":
       kind: Panel
       spec:
@@ -508,22 +557,28 @@ spec:
         items:
           - x: 0
             "y": 0
-            width: 8
+            width: 6
             height: 8
             content:
               $ref: '#/spec/panels/2_0'
-          - x: 8
+          - x: 6
             "y": 0
-            width: 8
+            width: 6
             height: 8
             content:
               $ref: '#/spec/panels/2_1'
-          - x: 16
+          - x: 12
             "y": 0
-            width: 8
+            width: 6
             height: 8
             content:
               $ref: '#/spec/panels/2_2'
+          - x: 18
+            "y": 0
+            width: 6
+            height: 8
+            content:
+              $ref: '#/spec/panels/2_3'
     - kind: Grid
       spec:
         display:
