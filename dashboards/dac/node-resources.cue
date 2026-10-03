@@ -99,17 +99,17 @@ import (
 // MEMORY — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-_nf: "{node=~\"$node\"}"
+_nf: "{node=~\"^$node$\"}"
 
 // Summary stats.
-#allocatable:         "sum(kube_node_status_allocatable{resource=\"memory\", node=~\"$node\"})"
+#allocatable:         "sum(kube_node_status_allocatable{resource=\"memory\", node=~\"^$node$\"})"
 #reserved: """
-	sum(kube_node_status_capacity{resource="memory", node=~"$node"})
-	- sum(kube_node_status_allocatable{resource="memory", node=~"$node"})
+	sum(kube_node_status_capacity{resource="memory", node=~"^$node$"})
+	- sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
 	"""
-#capacity:            "sum(kube_node_status_capacity{resource=\"memory\", node=~\"$node\"})"
-#workloadUtilization: "sum(node:memory:workloads_utilization:ratio" + _nf + ")"
-#memoryPSI:           "node:memory:pressure:ratio{node=~\"$node\"}"
+#capacity:            "sum(kube_node_status_capacity{resource=\"memory\", node=~\"^$node$\"})"
+#workloadUtilization: "sum(container_memory_working_set_bytes{id=\"/kubepods.slice\", node=~\"^$node$\"}) / sum(kube_node_status_allocatable{resource=\"memory\", node=~\"^$node$\"})"
+#memoryPSI:           "node:memory:pressure:ratio{node=~\"^$node$\"}"
 
 // Workload memory decomposition (kubepods.slice) — 4 stacked layers.
 #wkNonReclaimable: "node:memory:workloads_non_reclaimable:bytes" + _nf
@@ -127,24 +127,24 @@ _nf: "{node=~\"$node\"}"
 // CPU — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-#cpuCapacity:    "sum(kube_node_status_capacity{resource=\"cpu\", node=~\"$node\"})"
-#cpuAllocatable: "sum(kube_node_status_allocatable{resource=\"cpu\", node=~\"$node\"})"
+#cpuCapacity:    "sum(kube_node_status_capacity{resource=\"cpu\", node=~\"^$node$\"})"
+#cpuAllocatable: "sum(kube_node_status_allocatable{resource=\"cpu\", node=~\"^$node$\"})"
 #cpuReserved: """
-	sum(kube_node_status_capacity{resource="cpu", node=~"$node"})
-	- sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+	sum(kube_node_status_capacity{resource="cpu", node=~"^$node$"})
+	- sum(kube_node_status_allocatable{resource="cpu", node=~"^$node$"})
 	"""
 #cpuUtilization: """
-	sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", node=~"$node"}[5m]))
-	/ sum(kube_node_status_allocatable{resource="cpu", node=~"$node"})
+	sum(rate(container_cpu_usage_seconds_total{id="/kubepods.slice", cpu="total", node=~"^$node$"}[5m]))
+	/ sum(kube_node_status_allocatable{resource="cpu", node=~"^$node$"})
 	"""
-#cpuSystemUsed: "sum(rate(container_cpu_usage_seconds_total{id=\"/system.slice\", node=~\"$node\"}[5m]))"
-#cpuPSI:        "node:cpu:pressure:ratio{node=~\"$node\"}"
+#cpuSystemUsed: "sum(rate(container_cpu_usage_seconds_total{id=\"/system.slice\", cpu=\"total\", node=~\"^$node$\"}[5m]))"
+#cpuPSI:        "node:cpu:pressure:ratio{node=~\"^$node$\"}"
 
 // ══════════════════════════════════════════════════════════════════════
 // NETWORKING — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-_netFilter: "{instance=~\"$node\", device=~\"$nic\"}"
+_netFilter: "{instance=~\"^$node$\", device=~\"^$nic$\"}"
 #netTxUtil:  "node_nic:network:transmit_utilization:ratio" + _netFilter
 #netRxUtil:  "node_nic:network:receive_utilization:ratio" + _netFilter
 #netDrops:   "node_nic:network:drop_rate:packets_per_second" + _netFilter
@@ -154,18 +154,18 @@ _netFilter: "{instance=~\"$node\", device=~\"$nic\"}"
 // STORAGE — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-#ioPSIWaiting: "node:io:pressure_waiting:ratio{node=~\"$node\"}"
-#ioPSIStalled: "node:io:pressure_stalled:ratio{node=~\"$node\"}"
+#ioPSIWaiting: "node:io:pressure_waiting:ratio{node=~\"^$node$\"}"
+#ioPSIStalled: "node:io:pressure_stalled:ratio{node=~\"^$node$\"}"
 
-_fcFilter: "{instance=~\"$node\", fc_host=~\"$hba\"}"
+_fcFilter: "{instance=~\"^$node$\", fc_host=~\"^$hba$\"}"
 #fcTxUtil:   "node_hba:fc:transmit_utilization:ratio" + _fcFilter
 #fcRxUtil:   "node_hba:fc:receive_utilization:ratio" + _fcFilter
 #fcErrors:   "node_hba:fc:error_rate:frames_per_second" + _fcFilter
 #fcLinkLoss: "node_hba:fc:link_loss_rate:per_second" + _fcFilter
 
-#mpathDevices:     "count(node_dmmultipath_device_active{instance=~\"$node\"})"
-#mpathTotalPaths:  "sum(node_dmmultipath_device_paths{instance=~\"$node\"})"
-#mpathFailedPaths: "sum(node_dmmultipath_device_paths_failed{instance=~\"$node\"})"
+#mpathDevices:     "count(node_dmmultipath_device_active{instance=~\"^$node$\"})"
+#mpathTotalPaths:  "sum(node_dmmultipath_device_paths{instance=~\"^$node$\"})"
+#mpathFailedPaths: "sum(node_dmmultipath_device_paths_failed{instance=~\"^$node$\"})"
 
 // ══════════════════════════════════════════════════════════════════════
 // Dashboard
@@ -194,7 +194,7 @@ dashboardBuilder & {
 				#name:   "nic"
 				#display: name: "NIC"
 				#label:  "device"
-				#query:  "node_nic:network:transmit_utilization:ratio{instance=~\"$node\"}"
+				#query:  "node_nic:network:transmit_utilization:ratio{instance=~\"^$node$\"}"
 				#allowAllValue: true
 				#allowMultiple: false
 			},
@@ -202,7 +202,7 @@ dashboardBuilder & {
 				#name:   "hba"
 				#display: name: "HBA"
 				#label:  "fc_host"
-				#query:  "node_hba:fc:transmit_utilization:ratio{instance=~\"$node\"}"
+				#query:  "node_hba:fc:transmit_utilization:ratio{instance=~\"^$node$\"}"
 				#allowAllValue: true
 				#allowMultiple: false
 			},

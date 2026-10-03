@@ -81,10 +81,10 @@ import (
 // Common filter — applied to every container-level metric.
 // ══════════════════════════════════════════════════════════════════════
 
-_f: "namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", container!=\"POD\", container!=\"\""
+_f: "namespace=~\"^$namespace$\", pod=~\"^$pod$\", container=~\"^$container$\", container!=\"POD\", container!=\"\""
 
 // Pod-level filter (no container dimension — for network & I/O PSI).
-_pf: "namespace=~\"$namespace\", pod=~\"$pod\""
+_pf: "namespace=~\"^$namespace$\", pod=~\"^$pod$\""
 
 // ══════════════════════════════════════════════════════════════════════
 // MEMORY — PromQL fragments
@@ -112,33 +112,41 @@ _pf: "namespace=~\"$namespace\", pod=~\"$pod\""
 	"""
 
 #workingSet:  "sum(container_memory_working_set_bytes{" + _f + "})"
-#memLimit:    "sum(kube_pod_container_resource_limits{resource=\"memory\", namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"})"
+#memLimit:    "sum(kube_pod_container_resource_limits{resource=\"memory\", namespace=~\"^$namespace$\", pod=~\"^$pod$\", container=~\"^$container$\"})"
 #memUtilization: """
-	sum(container_memory_working_set_bytes{\( _f )})
+	sum(
+	  container_memory_working_set_bytes{\( _f )}
+	  * on (namespace, pod, container) group_left()
+	  (kube_pod_container_resource_limits{resource="memory", namespace=~"^$namespace$", pod=~"^$pod$", container=~"^$container$"} * 0 + 1)
+	)
 	/
-	sum(kube_pod_container_resource_limits{resource="memory", namespace=~"$namespace", pod=~"$pod", container=~"$container"})
+	sum(kube_pod_container_resource_limits{resource="memory", namespace=~"^$namespace$", pod=~"^$pod$", container=~"^$container$"})
 	"""
 
 // ══════════════════════════════════════════════════════════════════════
 // CPU — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-#cpuUsage: "sum(rate(container_cpu_usage_seconds_total{" + _f + "}[5m]))"
-#cpuLimit: "sum(kube_pod_container_resource_limits{resource=\"cpu\", namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\"})"
+#cpuUsage: "sum(rate(container_cpu_usage_seconds_total{" + _f + ", cpu=\"total\"}[5m]))"
+#cpuLimit: "sum(kube_pod_container_resource_limits{resource=\"cpu\", namespace=~\"^$namespace$\", pod=~\"^$pod$\", container=~\"^$container$\"})"
 #cpuUtilization: """
-	sum(rate(container_cpu_usage_seconds_total{\( _f )}[5m]))
+	sum(
+	  rate(container_cpu_usage_seconds_total{\( _f ), cpu="total"}[5m])
+	  * on (namespace, pod, container) group_left()
+	  (kube_pod_container_resource_limits{resource="cpu", namespace=~"^$namespace$", pod=~"^$pod$", container=~"^$container$"} * 0 + 1)
+	)
 	/
-	sum(kube_pod_container_resource_limits{resource="cpu", namespace=~"$namespace", pod=~"$pod", container=~"$container"})
+	sum(kube_pod_container_resource_limits{resource="cpu", namespace=~"^$namespace$", pod=~"^$pod$", container=~"^$container$"})
 	"""
 
 // ══════════════════════════════════════════════════════════════════════
 // NETWORK — PromQL fragments (pod-level, container="" in cAdvisor)
 // ══════════════════════════════════════════════════════════════════════
 
-#netRxBytes: "sum(rate(container_network_receive_bytes_total{" + _pf + ", interface!=\"lo\"}[5m]))"
-#netTxBytes: "sum(rate(container_network_transmit_bytes_total{" + _pf + ", interface!=\"lo\"}[5m]))"
-#netDrops:   "sum(rate(container_network_receive_packets_dropped_total{" + _pf + "}[5m])) + sum(rate(container_network_transmit_packets_dropped_total{" + _pf + "}[5m]))"
-#netErrors:  "sum(rate(container_network_receive_errors_total{" + _pf + "}[5m])) + sum(rate(container_network_transmit_errors_total{" + _pf + "}[5m]))"
+#netRxBytes: "sum(rate(container_network_receive_bytes_total{" + _pf + ", container=\"POD\", interface!=\"lo\"}[5m]))"
+#netTxBytes: "sum(rate(container_network_transmit_bytes_total{" + _pf + ", container=\"POD\", interface!=\"lo\"}[5m]))"
+#netDrops:   "sum(rate(container_network_receive_packets_dropped_total{" + _pf + ", container=\"POD\"}[5m])) + sum(rate(container_network_transmit_packets_dropped_total{" + _pf + ", container=\"POD\"}[5m]))"
+#netErrors:  "sum(rate(container_network_receive_errors_total{" + _pf + ", container=\"POD\"}[5m])) + sum(rate(container_network_transmit_errors_total{" + _pf + ", container=\"POD\"}[5m]))"
 
 // ══════════════════════════════════════════════════════════════════════
 // STORAGE — I/O PSI (pod-level recording rules)
@@ -174,7 +182,7 @@ dashboardBuilder & {
 				#name:   "pod"
 				#display: name: "Pod"
 				#label:  "pod"
-				#query:  "container_memory_working_set_bytes{namespace=~\"$namespace\",container!=\"\",container!=\"POD\"}"
+				#query:  "container_memory_working_set_bytes{namespace=~\"^$namespace$\",container!=\"\",container!=\"POD\"}"
 				#allowAllValue: true
 				#allowMultiple: false
 			},
@@ -182,7 +190,7 @@ dashboardBuilder & {
 				#name:   "container"
 				#display: name: "Container"
 				#label:  "container"
-				#query:  "container_memory_working_set_bytes{namespace=~\"$namespace\",pod=~\"$pod\",container!=\"\",container!=\"POD\"}"
+				#query:  "container_memory_working_set_bytes{namespace=~\"^$namespace$\",pod=~\"^$pod$\",container!=\"\",container!=\"POD\"}"
 				#allowAllValue: true
 				#allowMultiple: false
 			},

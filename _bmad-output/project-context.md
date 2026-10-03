@@ -49,6 +49,7 @@ On a small cluster (8 nodes, 300 pods, 500 containers, 30 VMs): 73 recording rul
 
 ## Pitfalls
 
+- **Do not use `sum by (node)` on aggregate cgroup metrics.** When the cgroup id filter is `id="/kubepods.slice"`, `id="/system.slice"`, or `id="/"`, there is exactly one series per node. `sum by (node)` is redundant — use the raw metric directly.
 - **Do not create per-container breakdown recording rules** (RSS, overhead, hot/cold file cache) for dashboard use. The cardinality cost (one series × metric × container) is too high and the pod-memory dashboard handles this correctly with raw queries.
 - **Do not mix recording rule naming formats.** Everything must be `level:area:metric:unit` with exactly 3 colons. Legacy 2-colon or 4-colon names have been eliminated.
 - **After editing a .cue file, always rebuild.** Run `percli dac build -f <file>.cue` in `dashboards/dac/` and commit the updated `built/` output. Stale built outputs will deploy the old dashboard.

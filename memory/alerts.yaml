@@ -59,6 +59,8 @@ spec:
         - alert: NodeMemoryPressureHigh
           expr: |
             node:memory:pressure:ratio > 0.05
+            unless
+            node:memory:pressure:ratio > 0.20
           for: 5m
           labels:
             severity: warning
@@ -184,12 +186,13 @@ spec:
         # thermal noise), but a sustained rate means the DIMM
         # should be scheduled for replacement.
         #
-        # We use a 1h rate window and a 15m for: to filter out
-        # single-event upsets (which are benign) and only fire
-        # on sustained error rates.
+        # We use increase() over 1h and require more than 10
+        # correctable errors to filter out single-event upsets
+        # (cosmic rays, thermal noise) and only fire on sustained
+        # error accumulation.
         - alert: MemoryECCCorrectableErrors
           expr: |
-            rate(node_edac_correctable_errors_total[1h]) > 0
+            increase(node_edac_correctable_errors_total[1h]) > 10
           for: 15m
           labels:
             severity: warning
@@ -213,13 +216,15 @@ spec:
         # has occurred.  The ECC hardware detected an error it
         # could not fix.  This is a "replace the DIMM now" event.
         #
-        # for: 0m — fire immediately, this is a data integrity
-        # issue that cannot wait.  The increase() over 5m gives
-        # us the debounce against counter resets.
+        # for: 1m — fire within one minute.  The brief delay
+        # ensures the counter has been scraped at least twice,
+        # filtering out spurious increases on counter appearance.
+        # The increase() over 5m gives us the debounce against
+        # counter resets.
         - alert: MemoryECCUncorrectableError
           expr: |
             increase(node_edac_uncorrectable_errors_total[5m]) > 0
-          for: 0m
+          for: 1m
           labels:
             severity: critical
           annotations:

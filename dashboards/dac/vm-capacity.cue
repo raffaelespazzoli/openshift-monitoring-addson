@@ -15,10 +15,13 @@ import (
 // clamp_max(v, scalar(limit)) is the smaller of the two counts. OpenShift
 // Prometheus parses min() as an aggregator, so min(a, b) is a query error.
 #vmsThatFit: """
-	floor(clamp_max(
-	  cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit,
-	  scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
-	))
+	clamp_min(
+	  floor(clamp_max(
+	    cluster:capacity:available_memory:bytes / $vm_memory * $memory_overcommit,
+	    scalar(cluster:capacity:available_cpu:cores / $vm_cpu * $cpu_overcommit)
+	  )),
+	  0
+	)
 	"""
 
 // 1 when CPU is the tighter limit, 0 when memory is. StatChart mappings
@@ -124,7 +127,10 @@ dashboardBuilder & {
 				#panels: [
 					panelBuilder & {
 						spec: {
-							display: name: "VMs that fit"
+							display: {
+								name:        "VMs that fit"
+								description: "How many more VMs of the selected shape fit. Floored at 0. Note: virt-launcher overhead (~500 MiB/VM) is not subtracted from available memory."
+							}
 							plugin: statChart & {
 								spec: {
 									calculation: "last-number"

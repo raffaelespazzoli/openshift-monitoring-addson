@@ -39,6 +39,7 @@ All Prometheus recording rules follow a **4-part, 3-colon** naming scheme:
 | `pod` | `{namespace, pod}` | Per pod |
 | `container` | `{namespace, pod, container}` | Per container |
 | `vmi` | `{namespace, name, node}` | Per virtual machine instance |
+| `vmi_disk` | `{namespace, name, node, drive}` | Per virtual disk per VM |
 
 ### Examples
 
@@ -46,7 +47,7 @@ All Prometheus recording rules follow a **4-part, 3-colon** naming scheme:
 node:memory:workloads_utilization:ratio       ← per-node, memory domain, measures workloads utilization, unit is ratio
 cluster:capacity:total_memory:bytes           ← cluster scalar, capacity domain, total memory, bytes
 node_nic:network:transmit_utilization:ratio   ← per-NIC, network domain, transmit utilization, ratio
-vmi:io:read_latency:seconds                   ← per-VM, I/O domain, read latency, seconds
+vmi_disk:io:read_latency:seconds              ← per-drive per-VM, I/O domain, read latency, seconds
 ```
 
 **Never deviate from 3 colons.** If a name would have fewer or more, restructure the parts.
@@ -105,6 +106,20 @@ sed -i -E '/defaultValue:$/{N;N;s/defaultValue:\n[[:space:]]+singleValue: (.*)\n
 ```
 
 The `dashboards/kustomization.yaml` JSON patches also fix this for the kustomize pipeline, but fixing the built files at source ensures all consumers work correctly.
+
+## Aggregate Cgroup Metrics — No `sum by (node)`
+
+When the cgroup id filter is `id="/kubepods.slice"`, `id="/system.slice"`, or `id="/"`, there is exactly **one** cgroup series per node. Do **not** wrap these in `sum by (node) (…)` — it is redundant because there is only one series to aggregate. Use the raw metric directly:
+
+```yaml
+# ✅ Correct — one series per node, no aggregation needed
+container_memory_working_set_bytes{id="/kubepods.slice"}
+
+# ❌ Wrong — unnecessary sum on a single-series-per-node metric
+sum by (node) (container_memory_working_set_bytes{id="/kubepods.slice"})
+```
+
+This applies to every `container_memory_*`, `container_pressure_*`, and `container_cpu_*` metric when filtered to an aggregate cgroup id.
 
 ## When Adding New Rules
 

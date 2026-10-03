@@ -31,6 +31,8 @@ spec:
         - alert: NodeCPUPressureHigh
           expr: |
             node:cpu:pressure:ratio > 0.15
+            unless
+            node:cpu:pressure:ratio > 0.50
           for: 5m
           labels:
             severity: warning
@@ -76,10 +78,10 @@ spec:
         # is the bottleneck — the guest has work to do but the host
         # isn't scheduling the vCPU onto a physical core.
         #
-        # The threshold is in vCPU-seconds of delay per wall-clock
-        # second.  A value of 0.5 means half a vCPU's worth of
-        # time is spent waiting — significant for a single-vCPU VM,
-        # moderate for a 16-vCPU VM.
+        # The threshold is the per-vCPU average fraction of time
+        # spent waiting.  A value of 0.5 means each vCPU on average
+        # spends 50% of its time waiting in the host scheduler
+        # queue — significant regardless of vCPU count.
         - alert: VMvCPUDelayHigh
           expr: |
             vmi:cpu:vcpu_delay:ratio > 0.5
@@ -88,15 +90,15 @@ spec:
             severity: warning
           annotations:
             summary: >-
-              VM {{ $labels.name }} in {{ $labels.namespace }} vCPU
-              scheduling delay at {{ $value | humanize }}
-              vCPU-seconds/s.
+              VM {{ $labels.name }} in {{ $labels.namespace }}
+              per-vCPU scheduling delay at
+              {{ $value | humanizePercentage }}.
             description: >-
-              The vCPUs of VM {{ $labels.name }} in namespace
+              Each vCPU of VM {{ $labels.name }} in namespace
               {{ $labels.namespace }} on node {{ $labels.node }}
-              have spent {{ $value | humanize }} vCPU-seconds per
-              second of wall-clock time waiting in the host CPU
-              scheduler queue for more than 5 minutes.  The VM is
-              experiencing host-level CPU contention.  Consider
-              migrating the VM to a less loaded node or reducing
-              the node's CPU overcommit.
+              is spending on average {{ $value | humanizePercentage }}
+              of its time waiting in the host CPU scheduler queue
+              (for more than 5 minutes).  The VM is experiencing
+              host-level CPU contention.  Consider migrating the
+              VM to a less loaded node or reducing the node's CPU
+              overcommit.

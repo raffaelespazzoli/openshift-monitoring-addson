@@ -104,11 +104,17 @@ spec:
             or vector(0)
 
         # GiB of memory request per CPU request.
+        # Guard: produces no series when CPU requests are zero,
+        # avoiding +Inf from division by scalar(0).
         - record: cluster:capacity:memory_cpu_ratio:gib_per_core
           expr: |
-            cluster:capacity:used_memory:bytes
-            / (1024 * 1024 * 1024)
-            / scalar(cluster:capacity:used_cpu:cores)
+            (
+              cluster:capacity:used_memory:bytes
+                  / (1024 * 1024 * 1024)
+              / scalar(cluster:capacity:used_cpu:cores)
+            )
+            and
+            cluster:capacity:used_cpu:cores > 0
 
         # Actual usage from kubelet cAdvisor.
         - record: cluster:capacity:vm_memory_usage:bytes
@@ -172,10 +178,17 @@ spec:
     # Time-to-exhaustion rules.
     - name: capacity-exhaustion.rules
       rules:
+        # Three-way exhaustion logic:
+        #   1. available ≤ 0 (already over-committed) → 0 days
+        #   2. available > 0 and declining            → linear projection
+        #   3. stable or growing                      → +Inf (safe)
+
         # --- 7-day window ---------------------------------------------------
         - record: cluster:capacity:memory_exhaustion_7d:days
           expr: |
             (
+              (cluster:capacity:available_memory:bytes <= 0) * 0
+              or
               (
                 - cluster:capacity:available_memory:bytes
                   / deriv(cluster:capacity:available_memory:bytes[7d])
@@ -187,6 +200,8 @@ spec:
         - record: cluster:capacity:cpu_exhaustion_7d:days
           expr: |
             (
+              (cluster:capacity:available_cpu:cores <= 0) * 0
+              or
               (
                 - cluster:capacity:available_cpu:cores
                   / deriv(cluster:capacity:available_cpu:cores[7d])
@@ -206,6 +221,8 @@ spec:
         - record: cluster:capacity:memory_exhaustion_30d:days
           expr: |
             (
+              (cluster:capacity:available_memory:bytes <= 0) * 0
+              or
               (
                 - cluster:capacity:available_memory:bytes
                   / deriv(cluster:capacity:available_memory:bytes[30d])
@@ -217,6 +234,8 @@ spec:
         - record: cluster:capacity:cpu_exhaustion_30d:days
           expr: |
             (
+              (cluster:capacity:available_cpu:cores <= 0) * 0
+              or
               (
                 - cluster:capacity:available_cpu:cores
                   / deriv(cluster:capacity:available_cpu:cores[30d])
@@ -236,6 +255,8 @@ spec:
         - record: cluster:capacity:memory_exhaustion_180d:days
           expr: |
             (
+              (cluster:capacity:available_memory:bytes <= 0) * 0
+              or
               (
                 - cluster:capacity:available_memory:bytes
                   / deriv(cluster:capacity:available_memory:bytes[180d])
@@ -247,6 +268,8 @@ spec:
         - record: cluster:capacity:cpu_exhaustion_180d:days
           expr: |
             (
+              (cluster:capacity:available_cpu:cores <= 0) * 0
+              or
               (
                 - cluster:capacity:available_cpu:cores
                   / deriv(cluster:capacity:available_cpu:cores[180d])
@@ -266,6 +289,8 @@ spec:
         - record: cluster:capacity:memory_exhaustion_360d:days
           expr: |
             (
+              (cluster:capacity:available_memory:bytes <= 0) * 0
+              or
               (
                 - cluster:capacity:available_memory:bytes
                   / deriv(cluster:capacity:available_memory:bytes[360d])
@@ -277,6 +302,8 @@ spec:
         - record: cluster:capacity:cpu_exhaustion_360d:days
           expr: |
             (
+              (cluster:capacity:available_cpu:cores <= 0) * 0
+              or
               (
                 - cluster:capacity:available_cpu:cores
                   / deriv(cluster:capacity:available_cpu:cores[360d])

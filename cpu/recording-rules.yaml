@@ -64,10 +64,12 @@ spec:
         # NOTE: Do NOT confuse with kubevirt_vmi_vcpu_wait_seconds_total
         # which measures vCPU I/O wait, not CPU scheduling delay.
         #
-        # The sum aggregates across all vCPUs of a VM.  A value of
-        # 1.0 means one vCPU-second of delay per wall-clock second —
-        # e.g. one vCPU was fully stalled, or two vCPUs were each
-        # 50% stalled.  Values > 1.0 are possible with many vCPUs.
+        # Normalized per-vCPU: total delay / vCPU count.  A value
+        # of 1.0 means each vCPU on average spent 100% of its time
+        # waiting in the host scheduler queue — the VM got no CPU
+        # at all.  0.5 means 50% of each vCPU's time was lost to
+        # host scheduling delay.  The normalization makes the
+        # threshold meaningful for both 1-vCPU and 16-vCPU VMs.
         #
         # KubeVirt already ships guest-internal CPU saturation alerts
         # (GuestVCPUQueueHighWarning/Critical) based on guest OS load
@@ -78,3 +80,5 @@ spec:
             sum by (namespace, name, node) (
               rate(kubevirt_vmi_vcpu_delay_seconds_total[5m])
             )
+            / on (namespace, name) group_left()
+            vmi:kubevirt_vmi_vcpu:count

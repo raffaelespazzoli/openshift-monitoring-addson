@@ -79,14 +79,15 @@ spec:
         # Computed as time spent in reads / number of read ops.
         # The > 0 guard on the denominator avoids division by zero
         # when a drive has no read activity.
-        - record: vmi:io:read_latency:seconds
+        # Level is vmi_disk (per-drive per-VM), not vmi (per-VM).
+        - record: vmi_disk:io:read_latency:seconds
           expr: |
             rate(kubevirt_vmi_storage_read_times_seconds_total[5m])
             /
             (rate(kubevirt_vmi_storage_iops_read_total[5m]) > 0)
 
         # Storage write latency (seconds per operation, per drive).
-        - record: vmi:io:write_latency:seconds
+        - record: vmi_disk:io:write_latency:seconds
           expr: |
             rate(kubevirt_vmi_storage_write_times_seconds_total[5m])
             /
@@ -118,13 +119,20 @@ spec:
         # ── FC port speed (label → numeric gauge) ────────────────
         #
         # Converts the string speed label to bytes/sec using the
-        # standard FC rate table.
+        # standard FC rate table.  Values are marketing-rate / 8:
+        # the kernel's tx_words_total counts raw (unencoded) FC
+        # words, so the byte rate matches the marketing speed
+        # directly (e.g. 16 Gbit → 2 GB/s = 2000000000 B/s).
         - record: node_hba:fc:port_speed:bytes_per_second
           expr: |
-            (node_fibrechannel_info{speed="128 Gbit",port_state="Online"} * 0 + 16000000000)
+            (node_fibrechannel_info{speed="256 Gbit",port_state="Online"} * 0 + 32000000000)
+            or (node_fibrechannel_info{speed="128 Gbit",port_state="Online"} * 0 + 16000000000)
             or (node_fibrechannel_info{speed="64 Gbit",port_state="Online"} * 0 + 8000000000)
+            or (node_fibrechannel_info{speed="40 Gbit",port_state="Online"} * 0 + 5000000000)
             or (node_fibrechannel_info{speed="32 Gbit",port_state="Online"} * 0 + 4000000000)
+            or (node_fibrechannel_info{speed="20 Gbit",port_state="Online"} * 0 + 2500000000)
             or (node_fibrechannel_info{speed="16 Gbit",port_state="Online"} * 0 + 2000000000)
+            or (node_fibrechannel_info{speed="10 Gbit",port_state="Online"} * 0 + 1250000000)
             or (node_fibrechannel_info{speed="8 Gbit",port_state="Online"} * 0 + 1000000000)
             or (node_fibrechannel_info{speed="4 Gbit",port_state="Online"} * 0 + 500000000)
             or (node_fibrechannel_info{speed="2 Gbit",port_state="Online"} * 0 + 250000000)
@@ -145,6 +153,16 @@ spec:
             (rate(node_fibrechannel_rx_words_total[5m]) * 4)
             / on (instance, fc_host) group_left
             node_hba:fc:port_speed:bytes_per_second
+
+        # Maximum of transmit and receive utilization.
+        # Used by alerts to report the worst-direction value.
+        - record: node_hba:fc:max_utilization:ratio
+          expr: |
+            max by (instance, fc_host) (
+              label_replace(node_hba:fc:transmit_utilization:ratio, "direction", "tx", "", "")
+              or
+              label_replace(node_hba:fc:receive_utilization:ratio, "direction", "rx", "", "")
+            )
 
         # ── FC error counters ────────────────────────────────────
         - record: node_hba:fc:error_rate:frames_per_second

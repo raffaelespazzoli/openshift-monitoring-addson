@@ -269,8 +269,8 @@ I/O pressure (PSI) at all scopes, Fibre Channel HBA monitoring, DM-multipath pat
 | `pod:io:pressure_stalled:ratio` | `rate(io_stalled{pod cgroup}[5m])` | Per-pod I/O pressure — "full" |
 | `container:io:pressure_waiting:ratio` | `rate(io_waiting{container cgroup}[5m])` | Per-container I/O pressure — "some" |
 | `container:io:pressure_stalled:ratio` | `rate(io_stalled{container cgroup}[5m])` | Per-container I/O pressure — "full" |
-| `vmi:io:read_latency:seconds` | `rate(read_times[5m]) / rate(iops_read[5m])` | Per-VM per-drive storage read latency (seconds per op) |
-| `vmi:io:write_latency:seconds` | `rate(write_times[5m]) / rate(iops_write[5m])` | Per-VM per-drive storage write latency (seconds per op) |
+| `vmi_disk:io:read_latency:seconds` | `rate(read_times[5m]) / rate(iops_read[5m])` | Per-VM per-drive storage read latency (seconds per op) |
+| `vmi_disk:io:write_latency:seconds` | `rate(write_times[5m]) / rate(iops_write[5m])` | Per-VM per-drive storage write latency (seconds per op) |
 | `vmi:io:throughput:bytes_per_second` | `sum by (ns,name,node)(rate(read+write traffic[5m]))` | Per-VM total storage throughput |
 | `node_hba:fc:port_speed:bytes_per_second` | `node_fibrechannel_info{speed} → bytes/sec` | FC port speed label converted to numeric gauge |
 | `node_hba:fc:transmit_utilization:ratio` | `rate(tx_words * 4[5m]) / port_speed` | Per-FC-HBA transmit utilization vs link speed |

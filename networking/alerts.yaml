@@ -32,11 +32,9 @@ spec:
         #   > 0.85 (85%) for 5 min → critical (immediate action)
         - alert: NodeNICSaturationWarning
           expr: |
-            (
-              node_nic:network:transmit_utilization:ratio > 0.70
-            or
-              node_nic:network:receive_utilization:ratio > 0.70
-            )
+            node_nic:network:max_utilization:ratio > 0.70
+            unless on (instance, device)
+            node_nic:network:max_utilization:ratio > 0.85
           for: 5m
           labels:
             severity: warning
@@ -47,19 +45,16 @@ spec:
             description: >-
               Network interface {{ $labels.device }} on node
               {{ $labels.instance }} has sustained more than 70%
-              bandwidth utilization for 5 minutes.  At this level
-              TCP congestion control is likely causing periodic
-              throughput degradation.  Review traffic patterns and
-              consider load-balancing or upgrading link capacity.
+              bandwidth utilization (worst direction) for 5 minutes.
+              At this level TCP congestion control is likely causing
+              periodic throughput degradation.  Review traffic
+              patterns and consider load-balancing or upgrading
+              link capacity.
               Current utilization: {{ $value | humanizePercentage }}.
 
         - alert: NodeNICSaturationCritical
           expr: |
-            (
-              node_nic:network:transmit_utilization:ratio > 0.85
-            or
-              node_nic:network:receive_utilization:ratio > 0.85
-            )
+            node_nic:network:max_utilization:ratio > 0.85
           for: 5m
           labels:
             severity: critical
@@ -70,7 +65,7 @@ spec:
             description: >-
               Network interface {{ $labels.device }} on node
               {{ $labels.instance }} has sustained more than 85%
-              bandwidth utilization for 5 minutes.  The link is
+              bandwidth utilization (worst direction) for 5 minutes.  The link is
               near saturation — packet drops, increased latency,
               and TCP throughput collapse are likely.  Immediate
               action required: redistribute traffic, check for

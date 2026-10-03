@@ -88,11 +88,9 @@ spec:
         # On clusters without FC storage they are a safe no-op.
         - alert: NodeFCHBASaturationWarning
           expr: |
-            (
-              node_hba:fc:transmit_utilization:ratio > 0.70
-            or
-              node_hba:fc:receive_utilization:ratio > 0.70
-            )
+            node_hba:fc:max_utilization:ratio > 0.70
+            unless on (instance, fc_host)
+            node_hba:fc:max_utilization:ratio > 0.85
           for: 5m
           labels:
             severity: warning
@@ -103,20 +101,16 @@ spec:
             description: >-
               Fibre Channel port {{ $labels.fc_host }} on node
               {{ $labels.instance }} has sustained more than 70%
-              bandwidth utilization for 5 minutes.  At this level
-              FC credit starvation may be causing I/O latency
-              spikes.  Review storage traffic patterns, check for
-              zoning imbalance, and consider adding FC paths or
-              upgrading port speed.
+              bandwidth utilization (worst direction) for 5 minutes.
+              At this level FC credit starvation may be causing I/O
+              latency spikes.  Review storage traffic patterns,
+              check for zoning imbalance, and consider adding FC
+              paths or upgrading port speed.
               Current utilization: {{ $value | humanizePercentage }}.
 
         - alert: NodeFCHBASaturationCritical
           expr: |
-            (
-              node_hba:fc:transmit_utilization:ratio > 0.85
-            or
-              node_hba:fc:receive_utilization:ratio > 0.85
-            )
+            node_hba:fc:max_utilization:ratio > 0.85
           for: 5m
           labels:
             severity: critical
@@ -127,7 +121,7 @@ spec:
             description: >-
               Fibre Channel port {{ $labels.fc_host }} on node
               {{ $labels.instance }} has sustained more than 85%
-              bandwidth utilization for 5 minutes.  The port is
+              bandwidth utilization (worst direction) for 5 minutes.  The port is
               near saturation — FC credit exhaustion will cause
               severe I/O latency and throughput collapse.  Immediate
               action required: redistribute storage workloads,

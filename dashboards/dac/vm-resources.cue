@@ -91,7 +91,7 @@ import (
 // Common filter
 // ══════════════════════════════════════════════════════════════════════
 
-_f: "name=~\"$vm\", namespace=~\"$namespace\""
+_f: "name=~\"^$vm$\", namespace=~\"^$namespace$\""
 
 // ══════════════════════════════════════════════════════════════════════
 // MEMORY — PromQL fragments
@@ -139,8 +139,11 @@ _f: "name=~\"$vm\", namespace=~\"$namespace\""
 // STORAGE — PromQL fragments (recording rules)
 // ══════════════════════════════════════════════════════════════════════
 
-#ioReadLatency:  "vmi:io:read_latency:seconds{" + _f + "}"
-#ioWriteLatency: "vmi:io:write_latency:seconds{" + _f + "}"
+// Per-drive filter (adds drive dimension to the base VM filter).
+_sf: _f + ", drive=~\"^$drive$\""
+
+#ioReadLatency:  "vmi_disk:io:read_latency:seconds{" + _sf + "}"
+#ioWriteLatency: "vmi_disk:io:write_latency:seconds{" + _sf + "}"
 #ioThroughput:   "vmi:io:throughput:bytes_per_second{" + _f + "}"
 
 // ══════════════════════════════════════════════════════════════════════
@@ -170,8 +173,16 @@ dashboardBuilder & {
 				#name:     "vm"
 				#display:  name: "VM"
 				#label:    "name"
-				#query:    "kubevirt_vmi_memory_available_bytes{namespace=~\"$namespace\"}"
+				#query:    "kubevirt_vmi_memory_available_bytes{namespace=~\"^$namespace$\"}"
 				#allowAllValue: false
+				#allowMultiple: false
+			},
+			labelValuesVarBuilder & {
+				#name:     "drive"
+				#display:  name: "Drive"
+				#label:    "drive"
+				#query:    "vmi_disk:io:read_latency:seconds{namespace=~\"^$namespace$\", name=~\"^$vm$\"}"
+				#allowAllValue: true
 				#allowMultiple: false
 			},
 		]
@@ -438,8 +449,8 @@ dashboardBuilder & {
 							}
 							plugin: #latencyChart
 							queries: [
-								{#tsQuery & {#query: #ioReadLatency, #format: "Read latency"}},
-								{#tsQuery & {#query: #ioWriteLatency, #format: "Write latency"}},
+								{#tsQuery & {#query: #ioReadLatency, #format: "Read {{drive}}"}},
+								{#tsQuery & {#query: #ioWriteLatency, #format: "Write {{drive}}"}},
 							]
 						}
 					},

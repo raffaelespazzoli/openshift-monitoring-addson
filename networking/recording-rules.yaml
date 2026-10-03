@@ -76,6 +76,17 @@ spec:
             * on (instance, device) group_left(duplex)
               node_network_info{duplex!=""}
 
+        # Maximum of transmit and receive utilization.
+        # Used by alerts to report the worst-direction value
+        # instead of keeping whichever happens to match first.
+        - record: node_nic:network:max_utilization:ratio
+          expr: |
+            max by (instance, device) (
+              label_replace(node_nic:network:transmit_utilization:ratio, "direction", "tx", "", "")
+              or
+              label_replace(node_nic:network:receive_utilization:ratio, "direction", "rx", "", "")
+            )
+
         # ── Node scope: packet drop rate ─────────────────────────
         # Drops = valid packets discarded by the stack (ring buffer
         # overflow, kernel queue full, memory pressure, or firewall
