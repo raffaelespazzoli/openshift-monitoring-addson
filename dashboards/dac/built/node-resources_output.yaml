@@ -124,21 +124,40 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_utilization:ratio{node=~"^$node$"}
+                  query: sum(container_memory_working_set_bytes{id="/kubepods.slice", node=~"^$node$"}) / sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
     "0_3":
       kind: Panel
       spec:
         display:
-          name: Reserved
-          description: system-reserved + kube-reserved + eviction-threshold
+          name: System Used
+          description: system.slice memory usage vs system reserved budget (dotted line)
         plugin:
-          kind: StatChart
+          kind: TimeSeriesChart
           spec:
-            calculation: last-number
-            format:
-              unit: bytes
-              decimalPlaces: 1
+            legend:
+              position: bottom
+              mode: list
+            querySettings:
+              - queryIndex: 1
+                colorMode: fixed-single
+                colorValue: '#FFFFFF'
+                lineStyle: dotted
+                areaOpacity: 0
+            visual:
+              display: line
+              areaOpacity: 0.3
+              lineWidth: 1.5
+            yAxis:
+              format:
+                unit: bytes
         queries:
+          - kind: TimeSeriesQuery
+            spec:
+              plugin:
+                kind: PrometheusTimeSeriesQuery
+                spec:
+                  query: sum(container_memory_usage_bytes{id="/system.slice", node=~"^$node$"})
+                  seriesNameFormat: System used
           - kind: TimeSeriesQuery
             spec:
               plugin:
@@ -147,6 +166,7 @@ spec:
                   query: |-
                     sum(kube_node_status_capacity{resource="memory", node=~"^$node$"})
                     - sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
+                  seriesNameFormat: ── Reserved
     "0_4":
       kind: Panel
       spec:
@@ -172,7 +192,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:pressure:ratio{node=~"^$node$"}
+                  query: max by (node) (node:memory:pressure:ratio{node=~"^$node$"})
                   seriesNameFormat: '{{node}}'
     "1_0":
       kind: Panel
@@ -207,28 +227,28 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_non_reclaimable:bytes{node=~"^$node$"}
+                  query: sum(node:memory:workloads_non_reclaimable:bytes{node=~"^$node$"})
                   seriesNameFormat: Non-reclaimable (RSS)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_overhead:bytes{node=~"^$node$"}
+                  query: sum(node:memory:workloads_overhead:bytes{node=~"^$node$"})
                   seriesNameFormat: Kernel overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_hot_reclaimable:bytes{node=~"^$node$"}
+                  query: sum(node:memory:workloads_hot_reclaimable:bytes{node=~"^$node$"})
                   seriesNameFormat: Hot reclaimable (active file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:workloads_cold:bytes{node=~"^$node$"}
+                  query: sum(node:memory:workloads_cold:bytes{node=~"^$node$"})
                   seriesNameFormat: Cold reclaimable (inactive file)
           - kind: TimeSeriesQuery
             spec:
@@ -270,28 +290,28 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_non_reclaimable:bytes{node=~"^$node$"}
+                  query: sum(node:memory:system_non_reclaimable:bytes{node=~"^$node$"})
                   seriesNameFormat: Non-reclaimable (RSS)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_overhead:bytes{node=~"^$node$"}
+                  query: sum(node:memory:system_overhead:bytes{node=~"^$node$"})
                   seriesNameFormat: Kernel overhead
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_hot_reclaimable:bytes{node=~"^$node$"}
+                  query: sum(node:memory:system_hot_reclaimable:bytes{node=~"^$node$"})
                   seriesNameFormat: Hot reclaimable (active file)
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:memory:system_cold:bytes{node=~"^$node$"}
+                  query: sum(node:memory:system_cold:bytes{node=~"^$node$"})
                   seriesNameFormat: Cold reclaimable (inactive file)
           - kind: TimeSeriesQuery
             spec:
@@ -437,7 +457,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:cpu:pressure:ratio{node=~"^$node$"}
+                  query: max by (node) (node:cpu:pressure:ratio{node=~"^$node$"})
                   seriesNameFormat: '{{node}}'
     "3_0":
       kind: Panel
@@ -464,14 +484,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:transmit_utilization:ratio{instance=~"^$node$", device=~"^$nic$"}
+                  query: max by (instance, device) (node_nic:network:transmit_utilization:ratio{instance=~"^$node$", device=~"^$nic$"})
                   seriesNameFormat: TX {{device}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:receive_utilization:ratio{instance=~"^$node$", device=~"^$nic$"}
+                  query: max by (instance, device) (node_nic:network:receive_utilization:ratio{instance=~"^$node$", device=~"^$nic$"})
                   seriesNameFormat: RX {{device}}
     "3_1":
       kind: Panel
@@ -498,14 +518,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:drop_rate:packets_per_second{instance=~"^$node$", device=~"^$nic$"}
+                  query: max by (instance, device) (node_nic:network:drop_rate:packets_per_second{instance=~"^$node$", device=~"^$nic$"})
                   seriesNameFormat: Drops {{device}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_nic:network:error_rate:packets_per_second{instance=~"^$node$", device=~"^$nic$"}
+                  query: max by (instance, device) (node_nic:network:error_rate:packets_per_second{instance=~"^$node$", device=~"^$nic$"})
                   seriesNameFormat: Errors {{device}}
     "4_0":
       kind: Panel
@@ -532,7 +552,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:io:pressure_waiting:ratio{node=~"^$node$"}
+                  query: max by (node) (node:io:pressure_waiting:ratio{node=~"^$node$"})
                   seriesNameFormat: '{{node}}'
     "4_1":
       kind: Panel
@@ -559,7 +579,7 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node:io:pressure_stalled:ratio{node=~"^$node$"}
+                  query: max by (node) (node:io:pressure_stalled:ratio{node=~"^$node$"})
                   seriesNameFormat: '{{node}}'
     "5_0":
       kind: Panel
@@ -586,14 +606,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:transmit_utilization:ratio{instance=~"^$node$", fc_host=~"^$hba$"}
+                  query: max by (instance, fc_host) (node_hba:fc:transmit_utilization:ratio{instance=~"^$node$", fc_host=~"^$hba$"})
                   seriesNameFormat: TX {{fc_host}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:receive_utilization:ratio{instance=~"^$node$", fc_host=~"^$hba$"}
+                  query: max by (instance, fc_host) (node_hba:fc:receive_utilization:ratio{instance=~"^$node$", fc_host=~"^$hba$"})
                   seriesNameFormat: RX {{fc_host}}
     "5_1":
       kind: Panel
@@ -620,14 +640,14 @@ spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:error_rate:frames_per_second{instance=~"^$node$", fc_host=~"^$hba$"}
+                  query: max by (instance, fc_host) (node_hba:fc:error_rate:frames_per_second{instance=~"^$node$", fc_host=~"^$hba$"})
                   seriesNameFormat: Errors {{fc_host}}
           - kind: TimeSeriesQuery
             spec:
               plugin:
                 kind: PrometheusTimeSeriesQuery
                 spec:
-                  query: node_hba:fc:link_loss_rate:per_second{instance=~"^$node$", fc_host=~"^$hba$"}
+                  query: max by (instance, fc_host) (node_hba:fc:link_loss_rate:per_second{instance=~"^$node$", fc_host=~"^$hba$"})
                   seriesNameFormat: Link loss {{fc_host}}
     "6_0":
       kind: Panel

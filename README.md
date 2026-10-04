@@ -44,7 +44,7 @@ resources:
   # Or pick individual areas:
   - github.com/rspazzol/openshift-monitoring-addson//cpu?ref=main
   - github.com/rspazzol/openshift-monitoring-addson//memory?ref=main
-  - github.com/rspazzol/openshift-monitoring-addson//dashboards/operator?ref=main
+  - github.com/rspazzol/openshift-monitoring-addson//dashboards?ref=main
 ```
 
 ## Repository Structure
@@ -82,23 +82,31 @@ resources:
 
 Each functional area is self-contained: recording rules and alerts within an area depend only on each other and on the in-cluster monitoring stack (kube-state-metrics, kubelet cAdvisor). You can deploy any combination of areas without cross-area dependencies.
 
-**Exception:** The dashboards in `capacity/` and `dashboards/` consume recording rules from the `capacity/` area. Deploy `capacity/` alongside `dashboards/` if you use the capacity planning dashboards.
+**Exception:** Dashboards consume recording rules from one or more areas. See the [Dashboards](#dashboards) section for the dependency table showing which areas each dashboard requires.
 
 ## Dependencies
 
 - OpenShift Container Platform 4.x with Cluster Monitoring Operator
-- OpenShift Virtualization (for VM-specific rules and dashboards)
-- cgroup v2 with PSI enabled (`psi=1` kernel boot parameter) — required for pressure rules
-- Cluster Observability Operator with Perses (for dashboards)
-- Node label `kubevirt.io/schedulable=true` on nodes that host VMs
+- OpenShift Virtualization — needed by `cpu/` (vCPU delay), `networking/` (VM drops/errors), `storage/` (VM I/O latency), `capacity/` (overcommit, overhead), and the VM-specific dashboards; the `memory/` area works without it
+- cgroup v2 with PSI enabled (`psi=1` kernel boot parameter) — required by the pressure rules in `memory/`, `cpu/`, and `storage/`
+- Cluster Observability Operator with Perses — required only for `dashboards/`
+- Node label `kubevirt.io/schedulable=true` on nodes that host VMs — used only by `capacity/` accounting rules
 
 All recording rules and alerts deploy as `PrometheusRule` CRs in `openshift-monitoring` with labels `prometheus: k8s` and `role: alert-rules`, matching the platform Prometheus rule selector.
 
+### Optional: Enable the Fibre Channel Collector
+
+The **Fibre Channel recording rules** (`node_hba:fc:*`) and **alerts** (`NodeFCHBASaturationWarning`, `NodeFCHBASaturationCritical`) require the node_exporter `fibrechannel` collector, which is **not enabled by default in OpenShift**'s node_exporter configuration. The Cluster Monitoring Operator does not expose a `cluster-monitoring-config` toggle for this collector.
+
+To enable it, deploy a **second node_exporter DaemonSet** that runs only the `fibrechannel` collector alongside the platform node_exporter. This avoids modifying the managed DaemonSet and survives Cluster Monitoring Operator upgrades. The second instance should listen on a different port and be scraped by a `ServiceMonitor` in `openshift-monitoring`.
+
+> **If you skip this step**, the FC rules and alerts are a safe no-op — they produce no time series and never fire on clusters without the collector enabled, even if FC HBAs are present.
+
 ### Optional: Enable the DM-Multipath Collector
 
-The **DM-multipath path health alerts** (`MultipathPathDegraded`, `MultipathPathCritical`, `MultipathDeviceSuspended`) require the node_exporter `dmmultipath` collector, which is **disabled by default in OpenShift**'s node_exporter configuration.
+The **DM-multipath path health alerts** (`MultipathPathDegraded`, `MultipathPathCritical`, `MultipathDeviceSuspended`) and the **Multipath Health** panels on the Node Resources dashboard require the node_exporter `dmmultipath` collector, which is **not enabled by default in OpenShift**'s node_exporter configuration.
 
-To enable it, patch the `cluster-monitoring-config` ConfigMap in `openshift-monitoring`:
+On OpenShift versions where the Cluster Monitoring Operator supports the `dmmultipath` collector toggle, enable it by patching the `cluster-monitoring-config` ConfigMap in `openshift-monitoring`:
 
 ```yaml
 apiVersion: v1
@@ -110,12 +118,15 @@ data:
   config.yaml: |
     nodeExporter:
       collectors:
-        dmmultipath: {}
+        dmmultipath:
+          enabled: true
 ```
 
-If you already have a `cluster-monitoring-config` ConfigMap, merge the `nodeExporter.collectors.dmmultipath: {}` entry into your existing `config.yaml`. The Cluster Monitoring Operator will roll-restart node_exporter DaemonSet pods automatically.
+If you already have a `cluster-monitoring-config` ConfigMap, merge the `nodeExporter.collectors.dmmultipath` entry into your existing `config.yaml`. The Cluster Monitoring Operator will roll-restart node_exporter DaemonSet pods automatically.
 
-> **If you skip this step**, the multipath alerts are a safe no-op — they simply produce no series and never fire.
+If the `dmmultipath` collector is **not available in your platform node_exporter image** (older OpenShift versions), deploy a **second node_exporter DaemonSet** that runs only the `dmmultipath` collector, the same way as described for the [Fibre Channel collector](#optional-enable-the-fibre-channel-collector) above.
+
+> **If you skip this step**, the multipath alerts and dashboard panels are a safe no-op — they simply produce no series and never fire.
 
 ---
 
@@ -162,25 +173,11 @@ Node-level memory decomposition, memory pressure (PSI), and OOM proximity detect
 | `ContainerMemoryApproachingOOM` | `working_set_utilization:ratio > 0.95` | warning | 5m | Container working_set exceeds 95% of its memory limit |
 | `PodMemoryApproachingOOM` | `pod working_set_utilization:ratio > 0.95` | warning | 5m | Pod total working_set exceeds 95% of pod-level memory limit |
 | `MemoryECCCorrectableErrors` | `increase(node_edac_correctable_errors_total[1h]) > 10` | warning | 15m | Sustained correctable ECC errors on a memory controller — DIMM degrading |
-| `MemoryECCUncorrectableError` | `increase(node_edac_uncorrectable_errors_total[5m]) > 0` | critical | 0m | Uncorrectable memory error — data corruption, replace DIMM immediately |
+| `MemoryECCUncorrectableError` | `increase(node_edac_uncorrectable_errors_total[5m]) > 0` | critical | 1m | Uncorrectable memory error — data corruption, replace DIMM immediately |
 
 > **Note:** EDAC alerts require ECC memory, which server-grade hardware always has. On systems without ECC, these alerts are a safe no-op.
 
 </details>
-
-### Dashboards
-
-| Dashboard | Description |
-|-----------|-------------|
-| **Node Resources** (`node-resources`) | Per-node resource overview: memory summary & decomposition, CPU summary & PSI, networking NIC utilization, storage I/O pressure, Fibre Channel, and DM-Multipath. |
-| **Pod Resources** (`pod-resources`) | Per-pod/container resource overview: memory decomposition with limit threshold, CPU utilization, network throughput & drops/errors, and storage I/O pressure (PSI). |
-| **VM Resources** (`vm-resources`) | Per-VM resource overview: guest memory decomposition & launcher overhead, vCPU usage & scheduling delay, network throughput & drops/errors, and storage I/O latency & throughput. |
-
-<!-- Dashboard screenshots — add images to docs/images/ and uncomment:
-![Node Resources](docs/images/node-resources.png)
-![Pod Resources](docs/images/pod-resources.png)
-![VM Resources](docs/images/vm-resources.png)
--->
 
 ---
 
@@ -297,7 +294,7 @@ I/O pressure (PSI) at all scopes, Fibre Channel HBA monitoring, DM-multipath pat
 | `MultipathPathCritical` | `paths_failed >= paths / 2` | critical | 2m | Half or more paths failed — high risk of total path loss |
 | `MultipathDeviceSuspended` | `node_dmmultipath_device_active == 0` | critical | 1m | Device-mapper device suspended — ALL I/O blocked |
 
-> **Note:** FC alerts are a safe no-op on clusters without Fibre Channel storage. DM-multipath alerts require the `dmmultipath` node_exporter collector to be enabled — see the [Dependencies](#optional-enable-the-dm-multipath-collector) section for instructions.
+> **Note:** FC rules and alerts require the `fibrechannel` collector — see [Enable the Fibre Channel Collector](#optional-enable-the-fibre-channel-collector). DM-multipath alerts require the `dmmultipath` collector — see [Enable the DM-Multipath Collector](#optional-enable-the-dm-multipath-collector). Both are safe no-ops when the respective collector is not enabled.
 
 </details>
 
@@ -316,7 +313,7 @@ Cross-functional capacity accounting, time-to-exhaustion projections, VM overcom
 
 | Rule | Expression (abbreviated) | Description |
 |------|--------------------------|-------------|
-| `cluster:capacity:nodes_down:count` | `vector(1)` | HA reserve — how many largest nodes to hold back from total capacity |
+| `cluster:capacity:nodes_down:count` | `vector(1)` | HA reserve — how many nodes should be able to be unavailable for planned and unplanned maintenance |
 | `cluster:capacity:total_memory:bytes` | `sum(allocatable{schedulable}) - max(allocatable) × nodes_down` | Schedulable memory minus the HA reserve |
 | `cluster:capacity:used_memory:bytes` | `sum(pod_resource_request{memory, schedulable})` | Memory requests on schedulable nodes |
 | `cluster:capacity:available_memory:bytes` | `total - used` | Available memory capacity |
@@ -350,7 +347,7 @@ Cross-functional capacity accounting, time-to-exhaustion projections, VM overcom
 | `cluster:capacity:cpu_exhaustion_<W>:days` | 7d, 30d, 180d, 360d | Days until CPU capacity runs out |
 | `cluster:capacity:exhaustion_<W>:days` | 7d, 30d, 180d, 360d | Days until whichever resource exhausts first |
 
-> **Note:** The 180d and 360d windows require matching Prometheus retention. On clusters with the default 15-day retention, these rules return no data and cost nothing.
+> **Note:** The 180d and 360d windows benefit from matching Prometheus retention. On clusters with the default 15-day retention, `deriv()` uses only those 15 days of samples — the projection still produces a value but is less reliable than one based on the full window. The cardinality cost is the same regardless (one scalar series per rule).
 
 </details>
 
@@ -365,15 +362,35 @@ Cross-functional capacity accounting, time-to-exhaustion projections, VM overcom
 
 </details>
 
-### Dashboards
+---
 
-These dashboards are cross-functional (memory + CPU) and do not belong to any single functional area.
+## Dashboards
 
-| Dashboard | Description |
-|-----------|-------------|
-| **Capacity Management** (`vm-capacity`) | How many more VMs of a chosen shape fit in remaining capacity. Variables: VM memory, VM CPU, memory overcommit, CPU overcommit. Stacked bar charts show non-VM used, VM used, and available for memory and CPU. |
-| **Time to Capacity Exhaustion** (`capacity-exhaustion`) | Days until the cluster runs out of capacity. Gauge capped at 365 with red/orange/green thresholds. Trend chart shows how the estimate has changed over time. Variable: observation period (7d–360d). |
-| **Overcommit Recommendation** (`vm-overcommit`) | Statistical overcommit analysis: Normal (bell-curve assumption) and Chebyshev (distribution-free) approaches with mathematical formulas. Variables: observation period, confidence level. Shows suggested overcommit ratios for memory and CPU with trend charts. |
+Six Perses dashboards are provided, covering per-entity resource views and cluster-wide capacity planning.
+
+### Resource Dashboards
+
+| Dashboard | Description | Required recording-rule areas |
+|-----------|-------------|-------------------------------|
+| **Node Resources** (`node-resources`) | Per-node resource overview: memory summary & decomposition, CPU summary & PSI, networking NIC utilization, storage I/O pressure, Fibre Channel, and DM-Multipath. | `memory/`, `cpu/`, `networking/`, `storage/` |
+| **Pod Resources** (`pod-resources`) | Per-pod/container resource overview: memory decomposition with limit threshold, CPU utilization, network throughput & drops/errors, and storage I/O pressure (PSI). | `storage/` |
+| **VM Resources** (`vm-resources`) | Per-VM resource overview: guest memory decomposition & launcher overhead, vCPU usage & scheduling delay, network throughput & drops/errors, and storage I/O latency & throughput. | `cpu/`, `networking/`, `storage/`, `capacity/` |
+
+<!-- Dashboard screenshots — add images to docs/images/ and uncomment:
+![Node Resources](docs/images/node-resources.png)
+![Pod Resources](docs/images/pod-resources.png)
+![VM Resources](docs/images/vm-resources.png)
+-->
+
+### Capacity Planning Dashboards
+
+These dashboards are cross-functional (memory + CPU) and provide cluster-wide views.
+
+| Dashboard | Description | Required recording-rule areas |
+|-----------|-------------|-------------------------------|
+| **Capacity Management** (`vm-capacity`) | How many more VMs of a chosen shape fit in remaining capacity. Variables: VM memory, VM CPU, memory overcommit, CPU overcommit. Stacked bar charts show non-VM used, VM used, and available for memory and CPU. | `capacity/` |
+| **Time to Capacity Exhaustion** (`capacity-exhaustion`) | Days until the cluster runs out of capacity. Gauge capped at 365 with red/orange/green thresholds. Trend chart shows how the estimate has changed over time. Variable: observation period (7d–360d). | `capacity/` |
+| **Overcommit Recommendation** (`vm-overcommit`) | Statistical overcommit analysis: Normal (bell-curve assumption) and Chebyshev (distribution-free) approaches with mathematical formulas. Variables: observation period, confidence level. Shows suggested overcommit ratios for memory and CPU with trend charts. | `capacity/` |
 
 <!-- Dashboard screenshots — add images to docs/images/ and uncomment:
 ![How many VMs fit](docs/images/vm-capacity.png)
@@ -381,9 +398,9 @@ These dashboards are cross-functional (memory + CPU) and do not belong to any si
 ![VM Overcommit](docs/images/vm-overcommit.png)
 -->
 
----
+> **Note:** Pod Resources uses mostly raw cAdvisor and kubelet metrics for memory, CPU, and network panels; only the I/O pressure panels require recording rules from `storage/`.
 
-## Dashboard Deployment
+### Deployment
 
 Dashboards are written with the [Perses CUE SDK](https://perses.dev/) in `dashboards/dac/`. The CUE sources are the single source of truth; `percli dac build` compiles them to Perses `Dashboard` YAML in `dashboards/dac/built/`.
 
@@ -430,7 +447,7 @@ These rules are designed to be lightweight. Below are reference measurements fro
 |--------|-----------|-------|
 | Recording rules | 75 | Across all functional areas |
 | Alert rules | 20 | Fire only — zero stored series when healthy |
-| Output time series | **~3,820** | Per evaluation cycle |
+| Output time series | **~3,780** | Per evaluation cycle |
 | CPU per evaluation | ~74 ms | 0.25% of the 30s evaluation budget |
 | Memory overhead | ~14.9 MB | TSDB head block (in-memory active series) |
 | Storage per day | ~15.7 MB/day | At 1.5 bytes/sample after TSDB compression |
@@ -449,15 +466,15 @@ The 75 recording rules produce time series at different scopes. Some are constan
 | Per NIC (×N×NICs) | 5 | 5 × N × NICs | 80 |
 | Per pod (×P) | 4 | 4 × P | 1,200 |
 | Per container (×C) | 4 | 4 × C | 2,000 |
-| Per VM (×V) | 9 | 9 × V | 270 |
+| Per VM (×V) | 7 | 7 × V | 210 |
 | Per VM drive (×V×D) | 2 | 2 × V × D | 120 |
 | Per FC HBA (×FC) | 6 | 6 × FC | 0 |
 | Alert rules | 20 | ~0 (fire only) | 0 |
-| **Total** | **95** | | **3,836** |
+| **Total** | **95** | | **3,776** |
 
 **The dominant cost is per-pod and per-container rules** (PSI and OOM proximity). On a cluster with P pods and C containers-with-limits, they produce `4P + 4C` series. On a 3,000-pod / 5,000-container production cluster, that's 32,000 series from those rules alone — still manageable, but consider raising the evaluation interval for the PSI groups from 30s to 60s or 120s on very large clusters.
 
-**`deriv()` and long lookback windows:** The 12 capacity-exhaustion rules are cluster-scalar (cheap in cardinality), but `deriv()` over a 360-day window requires Prometheus to read 360 days of samples at evaluation time. This is a query cost, not a storage cost. It only matters if retention is ≥ 360 days. On the default 15-day retention, the 180d and 360d windows return `NaN` — they're free but produce no data.
+**`deriv()` and long lookback windows:** The 12 capacity-exhaustion rules are cluster-scalar (cheap in cardinality), but `deriv()` over a 360-day window requires Prometheus to read 360 days of samples at evaluation time. This is a query cost, not a storage cost. It only matters if retention is ≥ 360 days. On the default 15-day retention, `deriv(...[180d])` and `deriv(...[360d])` still run but use only the available 15 days of samples — the projection is less reliable but the rule still produces a series (either a projected number of days or `+Inf` via the fallback branch).
 
 ### Measure the Impact on Your Cluster
 
@@ -469,13 +486,13 @@ Run these in the OpenShift web console (**Observe → Metrics**) or via the Than
 **Per-group evaluation duration (seconds)**
 How long each rule group takes to evaluate. Compare with the 30s interval.
 ```promql
-prometheus_rule_group_last_duration_seconds{rule_group=~".*capacity.*"}
+prometheus_rule_group_last_duration_seconds{rule_group=~"capacity-management.*|virt-launcher-overhead.*|capacity-exhaustion.*"}
 ```
 
 **Missed evaluations**
 Non-zero means rule evaluation is taking longer than the interval — rules are being skipped.
 ```promql
-increase(prometheus_rule_group_iterations_missed_total{rule_group=~".*capacity.*"}[1h])
+increase(prometheus_rule_group_iterations_missed_total{rule_group=~"capacity-management.*|virt-launcher-overhead.*|capacity-exhaustion.*"}[1h])
 ```
 
 **Rule evaluation CPU time**
@@ -502,7 +519,7 @@ sum by (pod) (rate(container_cpu_usage_seconds_total{
 **Samples produced per evaluation**
 Direct measure of output cardinality — how many time series each group writes per tick.
 ```promql
-prometheus_rule_group_last_evaluation_samples{rule_group=~".*capacity.*"}
+prometheus_rule_group_last_evaluation_samples{rule_group=~"capacity-management.*|virt-launcher-overhead.*|capacity-exhaustion.*"}
 ```
 
 **Total head series**
@@ -556,6 +573,5 @@ rate(prometheus_tsdb_compaction_chunk_size_bytes_sum[1h])
 | HA reserve (nodes held back) | `capacity/recording-rules.yaml` → `cluster:capacity:nodes_down:count` | `vector(1)` — one node |
 | VM shape / overcommit | Dashboard variables (query-time, not rules) | 8 GiB / 4 vCPU / 1× |
 | Alert thresholds | Each area's `alerts.yaml` | See tables above |
-| PSI evaluation interval | Per-group `interval` field in recording rules | 30s (OpenShift default) |
 | Dashboard namespace | `dashboards/wrap-perses-dashboard.yaml` | `openshift-operators` |
 | ConfigMap namespace | `dashboards/wrap-configmap.yaml` | `perses` |

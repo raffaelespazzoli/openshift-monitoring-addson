@@ -51,6 +51,16 @@ import (
 	}
 }
 
+#sparkBytes: {
+	kind: "TimeSeriesChart"
+	spec: {
+		legend: {position: "bottom", mode: "list"}
+		visual: {display: "line", areaOpacity: 0.3, lineWidth: 1.5}
+		yAxis: format: unit: "bytes"
+		...
+	}
+}
+
 #stackedAreaChart: {
 	kind: "TimeSeriesChart"
 	spec: {
@@ -108,20 +118,22 @@ _nf: "{node=~\"^$node$\"}"
 	- sum(kube_node_status_allocatable{resource="memory", node=~"^$node$"})
 	"""
 #capacity:            "sum(kube_node_status_capacity{resource=\"memory\", node=~\"^$node$\"})"
-#workloadUtilization: "node:memory:workloads_utilization:ratio" + _nf
-#memoryPSI:           "node:memory:pressure:ratio" + _nf
+#workloadUtilization: "sum(container_memory_working_set_bytes{id=\"/kubepods.slice\", node=~\"^$node$\"}) / sum(kube_node_status_allocatable{resource=\"memory\", node=~\"^$node$\"})"
+#memoryPSI:           "max by (node) (node:memory:pressure:ratio" + _nf + ")"
+#memSystemUsed:       "sum(container_memory_usage_bytes{id=\"/system.slice\", node=~\"^$node$\"})"
 
 // Workload memory decomposition (kubepods.slice) — 4 stacked layers.
-#wkNonReclaimable: "node:memory:workloads_non_reclaimable:bytes" + _nf
-#wkOverhead:       "node:memory:workloads_overhead:bytes" + _nf
-#wkHotReclaimable: "node:memory:workloads_hot_reclaimable:bytes" + _nf
-#wkCold:           "node:memory:workloads_cold:bytes" + _nf
+// Wrapped with sum() to deduplicate HA Prometheus replicas.
+#wkNonReclaimable: "sum(node:memory:workloads_non_reclaimable:bytes" + _nf + ")"
+#wkOverhead:       "sum(node:memory:workloads_overhead:bytes" + _nf + ")"
+#wkHotReclaimable: "sum(node:memory:workloads_hot_reclaimable:bytes" + _nf + ")"
+#wkCold:           "sum(node:memory:workloads_cold:bytes" + _nf + ")"
 
 // System memory decomposition (system.slice) — 4 stacked layers.
-#sysNonReclaimable: "node:memory:system_non_reclaimable:bytes" + _nf
-#sysOverhead:       "node:memory:system_overhead:bytes" + _nf
-#sysHotReclaimable: "node:memory:system_hot_reclaimable:bytes" + _nf
-#sysCold:           "node:memory:system_cold:bytes" + _nf
+#sysNonReclaimable: "sum(node:memory:system_non_reclaimable:bytes" + _nf + ")"
+#sysOverhead:       "sum(node:memory:system_overhead:bytes" + _nf + ")"
+#sysHotReclaimable: "sum(node:memory:system_hot_reclaimable:bytes" + _nf + ")"
+#sysCold:           "sum(node:memory:system_cold:bytes" + _nf + ")"
 
 // ══════════════════════════════════════════════════════════════════════
 // CPU — PromQL fragments
@@ -138,30 +150,30 @@ _nf: "{node=~\"^$node$\"}"
 	/ sum(kube_node_status_allocatable{resource="cpu", node=~"^$node$"})
 	"""
 #cpuSystemUsed: "sum(rate(container_cpu_usage_seconds_total{id=\"/system.slice\", cpu=\"total\", node=~\"^$node$\"}[5m]))"
-#cpuPSI:        "node:cpu:pressure:ratio" + _nf
+#cpuPSI:        "max by (node) (node:cpu:pressure:ratio" + _nf + ")"
 
 // ══════════════════════════════════════════════════════════════════════
 // NETWORKING — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
 _netFilter: "{instance=~\"^$node$\", device=~\"^$nic$\"}"
-#netTxUtil:  "node_nic:network:transmit_utilization:ratio" + _netFilter
-#netRxUtil:  "node_nic:network:receive_utilization:ratio" + _netFilter
-#netDrops:   "node_nic:network:drop_rate:packets_per_second" + _netFilter
-#netErrors:  "node_nic:network:error_rate:packets_per_second" + _netFilter
+#netTxUtil:  "max by (instance, device) (node_nic:network:transmit_utilization:ratio" + _netFilter + ")"
+#netRxUtil:  "max by (instance, device) (node_nic:network:receive_utilization:ratio" + _netFilter + ")"
+#netDrops:   "max by (instance, device) (node_nic:network:drop_rate:packets_per_second" + _netFilter + ")"
+#netErrors:  "max by (instance, device) (node_nic:network:error_rate:packets_per_second" + _netFilter + ")"
 
 // ══════════════════════════════════════════════════════════════════════
 // STORAGE — PromQL fragments
 // ══════════════════════════════════════════════════════════════════════
 
-#ioPSIWaiting: "node:io:pressure_waiting:ratio" + _nf
-#ioPSIStalled: "node:io:pressure_stalled:ratio" + _nf
+#ioPSIWaiting: "max by (node) (node:io:pressure_waiting:ratio" + _nf + ")"
+#ioPSIStalled: "max by (node) (node:io:pressure_stalled:ratio" + _nf + ")"
 
 _fcFilter: "{instance=~\"^$node$\", fc_host=~\"^$hba$\"}"
-#fcTxUtil:   "node_hba:fc:transmit_utilization:ratio" + _fcFilter
-#fcRxUtil:   "node_hba:fc:receive_utilization:ratio" + _fcFilter
-#fcErrors:   "node_hba:fc:error_rate:frames_per_second" + _fcFilter
-#fcLinkLoss: "node_hba:fc:link_loss_rate:per_second" + _fcFilter
+#fcTxUtil:   "max by (instance, fc_host) (node_hba:fc:transmit_utilization:ratio" + _fcFilter + ")"
+#fcRxUtil:   "max by (instance, fc_host) (node_hba:fc:receive_utilization:ratio" + _fcFilter + ")"
+#fcErrors:   "max by (instance, fc_host) (node_hba:fc:error_rate:frames_per_second" + _fcFilter + ")"
+#fcLinkLoss: "max by (instance, fc_host) (node_hba:fc:link_loss_rate:per_second" + _fcFilter + ")"
 
 #mpathDevices:     "count(node_dmmultipath_device_active{instance=~\"^$node$\"})"
 #mpathTotalPaths:  "sum(node_dmmultipath_device_paths{instance=~\"^$node$\"})"
@@ -268,23 +280,28 @@ dashboardBuilder & {
 							}]
 						}
 					},
-					// 4. Reserved (stat)
+					// 4. System Memory used (time series graph + reserved line)
 					panelBuilder & {
 						spec: {
 							display: {
-								name:        "Reserved"
-								description: "system-reserved + kube-reserved + eviction-threshold"
+								name:        "System Used"
+								description: "system.slice memory usage vs system reserved budget (dotted line)"
 							}
-							plugin: statChart & {
+							plugin: #sparkBytes & {
 								spec: {
-									calculation: "last-number"
-									format: {unit: "bytes", decimalPlaces: 1}
+									querySettings: [{
+										queryIndex:  1
+										colorMode:   "fixed-single"
+										colorValue:  "#FFFFFF"
+										lineStyle:   "dotted"
+										areaOpacity: 0
+									}]
 								}
 							}
-							queries: [{
-								kind: "TimeSeriesQuery"
-								spec: plugin: promQuery & {spec: query: #reserved}
-							}]
+							queries: [
+								{#tsQuery & {#query: #memSystemUsed, #format: "System used"}},
+								{#tsQuery & {#query: #reserved, #format: "── Reserved"}},
+							]
 						}
 					},
 					// 5. Memory Pressure (time series graph — PSI)
